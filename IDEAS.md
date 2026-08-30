@@ -647,6 +647,11 @@ Open questions:
 
 ## What the UI renders, and what it stores
 
+This section concerns Cerebror (the separate UI app; see "The UI"). It
+describes how the app's state is split, so the decisions here are likely to
+live in the Cerebror project, not in Ordinator. It is recorded here because it
+shapes what Ordinator must expose, but the implementation belongs to Cerebror.
+
 If views and layout are declared YAML and the frontend never writes them, state
 splits three ways. The split matters because blurring it is how a GUI ends up
 editing config files:
@@ -673,6 +678,12 @@ Open questions:
 ---
 
 ## Widgets as mechanism groups and mechanisms
+
+This section concerns Cerebror (the separate UI app; see "The UI"). The widget
+registry, how widgets group, and how they are discovered are Cerebror's
+concerns, so the decisions here are likely to live in the Cerebror project.
+It is recorded here because it shapes what Ordinator must expose, but the
+implementation belongs to Cerebror.
 
 The widget registry could take the same shape as Servitor's mechanisms
 (ADR-0031, ADR-0045): self-registering, discoverable through a `capabilities`
