@@ -1,6 +1,6 @@
-# Ideas: Tabulator
+# Ideas: Ordinator
 
-Catch-all for a direction that is not yet decided or built. Tabulator is a
+Catch-all for a direction that is not yet decided or built. Ordinator is a
 self-hosted, agent-first database whose schema, formulas, and views live in YAML
 files, built to stand on its own and to sit well next to Servitor in the same
 stack. These are possibilities, not commitments. Nothing here is a plan or a
@@ -15,7 +15,7 @@ resolved. Where an idea depends on something unbuilt, that dependency is named.
 
 ## The project
 
-Tabulator is a Grist-shaped tool (tables, typed columns, formulas, views) built on SQLite,
+Ordinator is a Grist-shaped tool (tables, typed columns, formulas, views) built on SQLite,
 where the definition lives in text files rather than inside the database.
 Schema, formulas, views, widget layout, and access rules are YAML; the SQLite
 file holds only data. A daemon owns the file and its single write connection, a
@@ -87,11 +87,11 @@ want the first without the second.
 ## What it deliberately does not do
 
 Servitor already owns workflow. Anything conditional, scheduled, retried, or
-fanned out is a Wafer, not a Tabulator feature. In particular there is no
+fanned out is a Wafer, not a Ordinator feature. In particular there is no
 automations layer, no schedules, no outbound logic, and no branching in
-Tabulator's own config; those would be a second, worse Wafer.
+Ordinator's own config; those would be a second, worse Wafer.
 
-The line that seems to hold: Tabulator is pure and synchronous. Formulas
+The line that seems to hold: Ordinator is pure and synchronous. Formulas
 compute over rows with no I/O. A value that requires an external call is not a
 formula, it is a plain column that a workflow writes into.
 
@@ -210,7 +210,7 @@ mostly conceptual:
   concept of (views are always derived). The `stored: true` mechanism is the
   only way to recover a version of it.
 - `SCHEDULE`: generates new rows, which a view cannot do; it conflicts anyway
-  with the "no scheduler in Tabulator" rule.
+  with the "no scheduler in Ordinator" rule.
 
 Separately, `SELF_HYPERLINK` is not impossible, it is the wrong layer. It builds
 a clickable link to a record or page in the app's UI, which is presentation, not
@@ -391,7 +391,7 @@ that boundary.
 
 ## Change events out
 
-For a workflow tool to trigger on Tabulator changes, Tabulator has to emit them.
+For a workflow tool to trigger on Ordinator changes, Ordinator has to emit them.
 
 **Option A: Standard Webhooks.** Emit `webhook-id`, `webhook-timestamp`, and
 `webhook-signature` per the spec. This is a published standard already sent by
@@ -408,7 +408,7 @@ integration on the Servitor side and creates exactly the coupling the
 independence constraint is trying to avoid, so it is probably wrong regardless
 of its other merits.
 
-**Option C: Servitor reads Tabulator's SQLite file directly** in read-only WAL mode.
+**Option C: Servitor reads Ordinator's SQLite file directly** in read-only WAL mode.
 Cheap, but couples Servitor to the compiled schema and bypasses the access
 rules. Probably a bad idea, kept here as the rejected alternative.
 
@@ -439,17 +439,17 @@ Open questions:
 Three shapes, mirroring Servitor's own vocabulary. They are not exclusive and
 could arrive in this order:
 
-- **`shell` node against the Tabulator CLI.** Zero integration work. A filtered
-  env with one declared secret, `tabulator query --json` and
-  `tabulator write --json -`. Useful for learning what the helper should look
+- **`shell` node against the Ordinator CLI.** Zero integration work. A filtered
+  env with one declared secret, `ordinator query --json` and
+  `ordinator write --json -`. Useful for learning what the helper should look
   like before committing to its schema.
-- **A curated helper** (`helper/tabulator`), matching the `grist`/`slack`/`github`
+- **A curated helper** (`helper/ordinator`), matching the `grist`/`slack`/`github`
   helpers: discrete calls, discrete inputs and outputs, schemas in
   `capabilities`. This lives in the Servitor repo, not this one, per the
   independence constraint. Other workflow tools would write their own
   equivalents against the same HTTP API.
-- **Singer tap and target.** `tap-tabulator` with a bookmark on an update cursor,
-  `target-tabulator` with upsert by primary key. Both catalogs are mechanical
+- **Singer tap and target.** `tap-ordinator` with a bookmark on an update cursor,
+  `target-ordinator` with upsert by primary key. Both catalogs are mechanical
   transforms of the compiled schema, so they cannot drift from it.
 
 Open questions:
@@ -458,7 +458,7 @@ Open questions:
   A lease during apply plus a retryable structured error (`schema_locked`) that
   composes with existing backoff is one option; queueing writes behind the
   migration is another.
-- Authentication. Tabulator has its own access rules; a Servitor token maps
+- Authentication. Ordinator has its own access rules; a Servitor token maps
   to a role. Whether that role is per-Wafer, per-deployment, or per-node is
   unresolved, and it interacts with Servitor's per-node secret delivery
   (ADR-0033).
@@ -503,19 +503,19 @@ directory already has.
 
 Servitor's IDEAS.md already sketches a control plane as a separate project: a
 read-only app consuming published data, aggregating several deployments, never
-talking to the daemon protocol. Tabulator needs a frontend too. Whether these
+talking to the daemon protocol. Ordinator needs a frontend too. Whether these
 are one project or two is open.
 
 The tension: the control plane as described is read-only, feed-consuming,
-multi-instance, and tolerant of minutes-old data. A Tabulator frontend needs data
+multi-instance, and tolerant of minutes-old data. A Ordinator frontend needs data
 entry, which means a live connection and a write path, and it is per-database.
 
 **Option A: one app, packages per backend.** A single renderer where each backend
-is an optional package the operator enables. Enable one and it is a Tabulator app
+is an optional package the operator enables. Enable one and it is a Ordinator app
 or a workflow observatory; enable both and the nav holds both. This is the
 current leaning, and it fits the independence constraint as long as the packages
 are independently enableable and neither backend knows the app exists.
-Attractive if the Tabulator frontend never edits config, because then both are
+Attractive if the Ordinator frontend never edits config, because then both are
 pure renderers of declared YAML and the difference really is only the data
 source. It also lets one dashboard mix a widget of overdue invoices with a
 widget of last night's failed runs.
@@ -538,9 +538,9 @@ existing groups rather than defining its own:
 
 ```yaml
 packages:
-  - tabulator:
+  - ordinator:
       instances:
-        - {name: ops, url: http://127.0.0.1:7000, secret: tabulator_token}
+        - {name: ops, url: http://127.0.0.1:7000, secret: ordinator_token}
   - servitor:
       instances:
         - {name: prod, feed: git@github.com:me/servitor-feed.git}
@@ -552,7 +552,7 @@ its auth requirements.
 The design point that decides how much this pays off: whether the adapter
 contract is **data-shaped** ("produce a row set", "produce an event sequence")
 or **product-shaped**. If data-shaped, core widgets belong to no package at all
-and a Servitor run list renders in the same `grid` widget as a Tabulator table,
+and a Servitor run list renders in the same `grid` widget as a Ordinator table,
 leaving only genuinely specific widgets in packages (the Wafer DAG diagram, the
 formula dependency graph, the outbox delivery panel). If product-shaped, each
 package reimplements a grid.
@@ -560,11 +560,11 @@ package reimplements a grid.
 Open questions:
 
 - Auth. The control plane wants coarse "who can see which runner's payloads"
-  (Keycloak or similar was floated). Tabulator wants per-row and per-column
+  (Keycloak or similar was floated). Ordinator wants per-row and per-column
   rules enforced server-side. Whether one identity layer serves both, and
   whether the two authorization models can coexist in one app, is unresolved.
 - Whether the "create tier" in the Wafers-as-a-diagram idea and any schema
-  editing in the Tabulator frontend should exist at all, given both projects gate
+  editing in the Ordinator frontend should exist at all, given both projects gate
   config changes through a reviewed PR (ADR-0009).
 - Deployment. One server or two, and whether a Wails packaging still makes sense
   if a live database connection is involved.
@@ -632,7 +632,7 @@ Open questions:
 - Whether the frontend project needs its own headless CLI to emit its
   capabilities directory, which is a real cost.
 - Whether view YAML validates in the frontend project (which has widget schemas
-  and reads the Tabulator feed) or somewhere else. Keeping the Tabulator daemon
+  and reads the Ordinator feed) or somewhere else. Keeping the Ordinator daemon
   ignorant of what a chart is seems worth preserving.
 
 ### Flat versus nested
@@ -684,26 +684,26 @@ one viewer able to render either:
 ```
 feed/
   meta.yaml           # instance id, kind, version, generated_at
-  capabilities/       # servitor: mechanism groups. tabulator: table schemas
-  definitions/        # servitor: the Wafers. tabulator: table and view YAML
-  history/            # servitor: runs and node outcomes. tabulator: change log, outbox
+  capabilities/       # servitor: mechanism groups. ordinator: table schemas
+  definitions/        # servitor: the Wafers. ordinator: table and view YAML
+  history/            # servitor: runs and node outcomes. ordinator: change log, outbox
   health.yaml         # daemon up, queue depth, last publish
 ```
 
 Signed and redacted, per the existing redaction invariants. Servitor's
 publication could be the dogfooding Wafer already sketched in its IDEAS.md;
-Tabulator's could be a `publish` command the same pipeline runs.
+Ordinator's could be a `publish` command the same pipeline runs.
 
 Why this is attractive: the viewer reads feeds rather than talking to products,
 so a third project gets an inspection UI by publishing the format. The
 cross-validation linter reads the same artifact.
 
 The independence constraint makes this the most likely place for a Servitor
-shape to leak into Tabulator, so the location of the normalization
+shape to leak into Ordinator, so the location of the normalization
 matters:
 
 - **Adapters in the frontend, backends ignorant.** Servitor already writes a
-  capabilities directory and has run data; Tabulator already compiles a
+  capabilities directory and has run data; Ordinator already compiles a
   schema and has a change log. The frontend reads each project's native output
   and normalizes internally. Loosest coupling, and a third tool gets an adapter
   without doing anything itself. Costs a normalizing layer per backend.
@@ -731,7 +731,7 @@ Candidates, in rough order of how clearly they repeat:
   `expected`, JSON Pointers, batch-all-errors-at-once) and its renderer.
 - The loopback daemon protocol.
 - The secret provider interface, so the operator seals secrets once and both
-  binaries consume them, and Tabulator inherits the KMS/TPM custody story
+  binaries consume them, and Ordinator inherits the KMS/TPM custody story
   without reimplementing it.
 - The capabilities-to-disk writer.
 
@@ -740,7 +740,7 @@ across repos. Sharing means promoting a narrow set to a public module, which is
 a deliberate decision with a cost.
 
 **Runtime independence is easy; build independence is what this actually costs.**
-If Tabulator imports a module from the Servitor repo, it inherits Servitor's
+If Ordinator imports a module from the Servitor repo, it inherits Servitor's
 release cadence and Go version, and a security fix in one drags the other. Three
 options, and they can differ per item:
 
@@ -773,14 +773,14 @@ available answer to a standalone user, and two things follow.
 **An internal scheduler is needed regardless.** Outbox delivery retries,
 dedupe-window cleanup, and stored-column recompute all need one. The discipline
 is that it stays internal and never appears in user-facing YAML. The moment a
-table file can declare `schedule:`, Tabulator has started rebuilding Servitor
+table file can declare `schedule:`, Ordinator has started rebuilding Servitor
 inside itself, and it will be a worse one.
 
 **Reactions are the harder tension.** A standalone user will want "email me when
 an invoice goes overdue," and the honest answer under the current framing is
 "point a workflow tool at the webhook." Options:
 
-- **Ship nothing.** Tabulator alone is a database with no reactions, which is
+- **Ship nothing.** Ordinator alone is a database with no reactions, which is
   fine for some users and a dealbreaker for others. Keeps the boundary perfectly
   clean.
 - **Ship one trivial sink** (an outbound webhook plus, say, email) with no
@@ -815,7 +815,7 @@ as open might fall out:
   publishing format.
 
 Why it is separate: this is a data-model question for Servitor, independent of
-Tabulator and of any UI. It would interact with the transactional
+Ordinator and of any UI. It would interact with the transactional
 atom (execution model step 8) and with Honker's queue semantics, and neither
 interaction has been thought through.
 
@@ -860,7 +860,7 @@ just a restatement of the registry model already sketched above.
 MIT is under reconsideration in light of Grist's open-core creep: Grist moved
 self-hosted OIDC/SAML SSO behind a paid activation key, and a self-hosted,
 agent-first stack needs real SSO (Cerebror wants one identity layer). AGPLv3 is
-the candidate for Servitor, Tabulator, and Cerebror. This is not decided; the
+the candidate for Servitor, Ordinator, and Cerebror. This is not decided; the
 two goals pull against each other and the choice is deferred until the projects
 are real.
 
@@ -985,7 +985,7 @@ off it, and it is currently undecided.
 ### Access rules and auth
 
 - **How do per-row and per-column access rules get compiled and enforced?**
-  Tabulator wants Grist-style ACLs, which under Option A must become SQL-level
+  Ordinator wants Grist-style ACLs, which under Option A must become SQL-level
   filtering, but how that compiles from YAML is unresolved, and it cannot be
   enforced for a raw file read anyway (a bare SQLite client bypasses any
   in-database filter).
@@ -1003,19 +1003,19 @@ off it, and it is currently undecided.
 
 ## Cross-cutting open questions
 
-- Whether the Tabulator daemon should refuse to boot without the Honker
+- Whether the Ordinator daemon should refuse to boot without the Honker
   extension, as Servitor does (ADR-0011), or only when event emission is
   configured. A database with no outbound events is still useful.
 - Whether the two daemons and two CLIs are an acceptable operational cost, or
   whether this should have been a Servitor mechanism package after all. The
-  counterargument is that Tabulator needs a frontend, a different release
+  counterargument is that Ordinator needs a frontend, a different release
   cadence, and its own write connection.
 - Where seeds sit on the config/data boundary. Choice lists, tax rates, category
   tables are arguably both. A `managed: true` flag per table, where the compiler
   owns those rows and reconciles them on apply, is one option.
 - Branching. YAML merges; the SQLite file does not. For a single-doc tool this
   is fine, for a team it becomes the main operational question.
-- Whether Tabulator is genuinely useful to someone with no workflow tool at
+- Whether Ordinator is genuinely useful to someone with no workflow tool at
   all, or whether "point a workflow tool at the webhook" is an acceptable answer
   in the README. This is the test of whether the independence constraint is real
   or aspirational.
