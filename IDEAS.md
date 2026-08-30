@@ -201,69 +201,75 @@ provided by host-registered functions:
 
 ```yaml
 tables:
+  # Customers: people we sell to.
   customers:
     columns:
-      name: text
-      email: text
-      is_vip: bool
-      joined: date
-      full_name:
+      name: text                    # display name
+      email: text                   # contact email
+      is_vip: bool                  # true for high-value customers
+      joined: date                  # when they signed up
+
+      full_name:                    # same as name, shown capitalized
         formula: >-
           upper(name)
-      email_ok:
+      email_ok:                     # whether the email looks valid
         formula: >-
           matches(email, '@')
-      age_days:
+      age_days:                     # days since they joined
         formula: >-
           date_diff(today(), joined, 'd')
-      tag:
+      tag:                          # 'vip' for VIPs, else 'normal'
         formula: >-
           is_vip ? 'vip' : 'normal'
 
+  # Invoices: one per bill we send. customer points at the customer row.
   invoices:
     columns:
       customer: {type: ref, target: customers}
-      issued: date
-      due: date
+      issued: date                  # invoice date
+      due: date                     # payment deadline
       status: {type: choice, values: [draft, sent, paid, void]}
-      customer_name:
+
+      customer_name:                # pull the customer's name across the reference
         formula: >-
           customer.name
-      days_overdue:
+      days_overdue:                 # days late, only meaningful once sent
         formula: >-
           status == 'sent'
           ? max(0, date_diff(today(), due, 'd'))
           : 0
-      is_late:
+      is_late:                      # true if we are past the deadline
         formula: >-
           days_overdue > 0
-      balance: number
+      balance: number               # how much is still unpaid (entered, not computed)
 
+  # Invoice lines: the individual line items on an invoice.
   invoice_lines:
     columns:
-      invoice: {type: ref, target: invoices}
-      amount: number
-      qty: number
-      line_total:
+      invoice: {type: ref, target: invoices}   # which invoice this line belongs to
+      amount: number                # unit price
+      qty: number                   # how many units
+      line_total:                   # cost of this line
         formula: >-
           amount * qty
 
+  # Invoice totals: one row per invoice, rolling up its lines.
   invoice_totals:
     columns:
       invoice: {type: ref, target: invoices}
-      sum:
+      sum:                          # total of all line totals on the invoice
         formula: >-
           sum(invoice.lines, .line_total)
-      line_count:
+      line_count:                   # how many lines the invoice has
         formula: >-
           count(invoice.lines)
-      max_line:
+      max_line:                     # the largest single line total
         formula: >-
           max(map(invoice.lines, .line_total))
-      mid_line:
+      mid_line:                     # the middle line total (host function)
         formula: >-
           median(map(invoice.lines, .line_total))
-      status_word:
+      status_word:                  # 'status' spelled out for display
         formula: >-
           {'sent': 'Outstanding',
            'paid': 'Paid',
