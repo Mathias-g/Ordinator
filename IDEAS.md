@@ -27,20 +27,101 @@ serves humans and agents identically, capability discovery is a first-class
 operation, validation errors are structured, and a plan/dry-run step exists
 before anything is applied.
 
+### Parity is a baseline, not a constraint
+
+"Grist feature parity" is the target user experience and vocabulary, not a rule
+that we copy Grist's answers to every question. Grist's design is the output of
+its own priorities (a hosted multitenant SaaS, per-document sandboxed Python,
+metadata inside the SQLite file, schemas edited in the UI). Where Ordinator's
+priorities differ, the answer can legitimately diverge, and deciding from first
+principles rather than copying is the point.
+
+We do copy Grist where the parity is load-bearing: the object-model semantics
+(references, lookups, reverse traversal, aggregation over related rows), the
+column types, and the user-facing vocabulary (columns, tables, references,
+formulas, pages). These are what make it feel like Grist, and users already
+know them.
+
+We decide for ourselves where our constraints differ from Grist's:
+
+- **The definition lives in files, not in the database.** Schema, formulas,
+  views, and access rules are PR-gated YAML; Grist keeps them as mutable
+  metadata rows edited in the UI. This is settled (SPEC: the artifact) and is
+  the single biggest divergence.
+- **Static typing.** Grist columns are loosely typed (`Any`, per-cell
+  narrowing). Ordinator columns are typed from the schema, so formulas cannot
+  silently mix types. This is a strength we own.
+- **No arbitrary user code.** Grist evaluates sandboxed Python; Ordinator
+  evaluates a pure, non-Turing-complete expression language with host-registered
+  functions (ADR-0006), decided on security grounds.
+- **Security at rest and compute isolation.** How data is stored at rest
+  (encryption), and how far to isolate the daemon (whether to borrow Servitor's
+  subprocess model for per-document isolation), are ours to decide, not
+  Grist's answers.
+- **The file shape and project layout.** Whether one document is one folder
+  under a `documents/` root, how many documents a deployment runs, and how
+  boards and access rules are arranged are all decided on our terms.
+
+Where Grist parity and first-principles conflict, first principles win. Parity
+is a vocabulary and a feature target; it is not an argument for copying a
+design choice Grist made for reasons that do not apply to Ordinator.
+
+### Structure, mirrored from Servitor
+
+Servitor is elegant in a specific way, and that elegance is worth copying even
+though the details do not transfer. The principles, and how they map to
+Ordinator:
+
+**One artifact, one obvious home.** In Servitor, a Wafer is a file; a mechanism
+is a package in its group's directory; a capability is a self-registering
+declaration with its schema next to it. Everything is where you would look for
+it, and nothing is discoverable only by reading code. Ordinator mirrors this:
+a document is a folder with one `board.yaml` holding the whole definition.
+
+**The definition is declarative and self-describing.** A Servitor capability
+declares its name, description, role, delivery, and JSON Schema in one place,
+and the schema feeds both validation and the agent-facing example, so the two
+cannot drift. Ordinator should do the same: a column declares its type and its
+formula together in the Board, and the schema drives both validation and the
+derived example an agent sees.
+
+**Flat lists plus a separate layout block.** Servitor's nodes are a flat list
+with dependency edges, not nested containers; tabs and grouping are a layout
+property. Where Ordinator has lists that could nest (for example tables and
+columns, or any future widget layout), it prefers a flat list plus a separate
+layout block, which keeps the schema non-recursive and examples renderable
+from it.
+
+**Named groups that are families, not taxonomies.** Servitor groups mechanisms
+by role (core, webhook, singer, mcp, helper) and a mechanism is a member of a
+group, not a leaf in a deep tree. A service reached by several mechanisms
+appears in several groups. Ordinator applies the same shape where it groups
+things (for example widget types by binding shape: tabular, record, aggregate,
+stream, static), so the group is the data contract.
+
+**Deletability without a central list.** Removing a Servitor mechanism's
+package removes it, with a blank import the only thing to touch. Ordinator's
+widgets should be the same: a widget is its own directory, discoverable by
+globbing, not registered in a central import list.
+
+**Derived examples from schemas, not hand-written.** Servitor's agent-facing
+example fragments are generated from the schema's `examples` values, so they
+cannot drift. Ordinator's Board and widget examples should be generated the
+same way, from the schema.
+
+The point of listing these here is that Ordinator's file shape should aim at
+the same obviousness: an agent (or a human) opening a document should be able
+to see what tables exist, what columns they have, and how it all fits together,
+without reading implementation code.
+
 Rough layout, not settled:
 
 ```
-project/
-  config.yaml          # substitutions, packages, includes
-  tables/
-    customers.yaml     # columns, types, formulas
-    invoices.yaml
-  views/
-    billing.yaml       # widgets and layout
-  access.yaml
-  seeds/
-    tax_rates.csv
-  data.sqlite          # not the source of truth for anything but data
+documents/
+  main/                           # a Document (one database)
+    board.yaml                    # the Board: the whole definition (tables, columns, formulas)
+    access.yaml                   # access rules
+    data.sqlite                   # the data, not the definition
 ```
 
 Why this is attractive:
@@ -53,6 +134,82 @@ Why this is attractive:
   product.
 - Two file-first projects in one stack can validate against each other before
   either is applied (see "Cross-validation between projects").
+
+### Definitions
+
+The terms, and where each thing lives. This is the hierarchy the rest of the
+design builds on:
+
+- **Document** is a database: one folder holding everything for that database.
+  Documents live under a `documents/` root, one folder per document. A
+  deployment runs one or more documents, each a separate folder with its own
+  board, access rules, and SQLite file. A document is the unit of isolation and
+  of a self-contained body of data (the analogue of a Grist document, which is
+  one `.grist` file).
+
+- **Board** is a document's complete definition: one `board.yaml` per document,
+  holding all tables, each with its columns, types, and formulas inline. It is
+  the analogue of Grist's code-view file, which holds the whole document's
+  schema and formulas in one artifact. Schema and behavior are not separate;
+  a column's type and its formula live together, as they do in Grist.
+
+- **Table** is a set of typed columns and rows, defined inside the Board (as
+  tables are defined inline in Grist's code-view). A table is data plus its
+  schema and its formulas.
+
+- **View** is not part of the Board. The compile-to-SQL-view approach was
+  rejected (ADR-0005). Frontend page/screen concerns are separate from the
+  Board, which is not for building frontends.
+
+- **Access rules** are defined in `access.yaml` at the document's root.
+
+Where things live, at a glance:
+
+```
+documents/
+  main/                           # a Document (one database)
+    board.yaml                    # the Board: the whole definition (tables, columns, formulas)
+    access.yaml                   # access rules
+    data.sqlite                   # the data, not the definition
+```
+
+### Schema changes and the apply cycle
+
+Because the schema is text and the data is in the SQLite file, editing the
+schema is a migration, not a silent rewrite. A schema edit can destroy data if
+it is treated naively: renaming a column in YAML must not wipe the column's
+values out of every row. The principle:
+
+**Destructive changes must be explicit and visible; the default is safe.**
+
+- **Column identity is a stable id, not the name.** Columns carry an internal
+  id; the YAML name is a human-readable label. Renaming the label never touches
+  the data, because the data is keyed by the id, not the name. This makes a
+  rename safe by construction (the common, easy case).
+- **Renames are label changes, not data operations.** A rename carries the data
+  over. It never looks destructive.
+- **Type changes and drops are explicit migrations.** Changing a column's type,
+  or removing a column, genuinely changes the data's shape, so it must be
+  declared as what it is, not inferred. The compiler does not guess "is this a
+  rename or a drop-and-add?"; the author says which.
+- **`apply` refuses to guess and refuses silent loss.** If the dry-run sees a
+  change it cannot classify as safe (a removed column with no rename, a type
+  change with no migration), it fails and asks, rather than proceeding.
+- **The plan/dry-run step surfaces destruction.** `apply` shows a loud, explicit
+  diff ("DROP COLUMN customers.age, 10,000 values") before it happens, so an
+  operator or agent sees the cost of a destructive change ahead of time.
+- **A backup or recovery path is the backstop.** Even with the above, a
+  destructive act is preceded by a backup or is reversible, so a mistake has a
+  recovery path, not just a warning.
+
+Open questions:
+
+- How a rename, type change, or drop is expressed in the YAML (an explicit
+  `rename:`/`migrate:`/`drop:` directive, versus the compiler inferring it from
+  the old and new schema and refusing anything ambiguous).
+- How `apply` diffs old vs new schema to classify a change as safe, a rename, a
+  type migration, or a drop, and where that diff is computed and stored.
+- Whether `apply` can roll back if a migration fails partway.
 
 ---
 
@@ -427,36 +584,27 @@ directory already has.
 
 ## The UI
 
-Servitor's IDEAS.md already sketches a control plane as a separate project: a
-read-only app consuming published data, aggregating several deployments, never
-talking to the daemon protocol. Ordinator needs a frontend too. Whether these
-are one project or two is open.
+The frontend is **Cerebror**, a separate app in its own project, not internal to
+Servitor or Ordinator. It connects to either backend or both, depending on how
+it is configured. Neither backend knows the app exists; each is independently
+usable without it. This satisfies the independence constraint: Cerebror depends
+on Servitor and Ordinator, never the other way.
 
-The tension: the control plane as described is read-only, feed-consuming,
-multi-instance, and tolerant of minutes-old data. A Ordinator frontend needs data
-entry, which means a live connection and a write path, and it is per-database.
-
-**Option A: one app, packages per backend.** A single renderer where each backend
-is an optional package the operator enables. Enable one and it is a Ordinator app
-or a workflow observatory; enable both and the nav holds both. This is the
-current leaning, and it fits the independence constraint as long as the packages
-are independently enableable and neither backend knows the app exists.
-Attractive if the Ordinator frontend never edits config, because then both are
-pure renderers of declared YAML and the difference really is only the data
-source. It also lets one dashboard mix a widget of overdue invoices with a
+Cerebror is one app that renders either backend, or both at once. Each backend
+is an optional package the operator enables: enable one and Cerebror is a
+Ordinator app or a workflow observatory; enable both and the nav holds both.
+Because a backend never edits config through the app, Cerebror is a pure
+renderer of declared YAML, and the only real difference between backends is the
+data source. This lets one dashboard mix a widget of overdue invoices with a
 widget of last night's failed runs.
 
-**Option B: two apps sharing a component library.** An npm package with design
-tokens, table chrome, and the structured-error renderer; separate shells,
-routing, auth, and deployment. Avoids one app carrying two auth models and two
-staleness assumptions.
+The thing to keep in mind: a Servitor control plane as sketched is read-only,
+feed-consuming, multi-instance, and tolerant of minutes-old data, while a
+Ordinator frontend needs data entry, a live connection, a write path, and is
+per-database. Cerebror carries both. They share an auth model (both support
+OIDC) but differ in staleness tolerance.
 
-**Option C: three surfaces.** An observatory (read-only, multi-instance,
-feed-consuming), a grid (live, per-database, write path), and no authoring
-surface at all, on the grounds that the agent plus the PR review in the git host
-is the authoring UI and it already exists.
-
-### What a package is, if Option A holds
+### What a package is
 
 A package should be a distribution and enablement unit, not a new taxonomy.
 Widget groups stay binding-shaped, and a package contributes widgets into those
@@ -604,52 +752,58 @@ early because it affects every widget's contract.
 
 ## Boards
 
-A Board is Ordinator's declared-UI artifact, the analogue of Servitor's Wafer: a
-YAML file describing one page or view of the frontend. It declares which widgets
-appear, what data each binds to, and how they are laid out. Boards live under
-`views/` (for example `views/billing.yaml`) and are PR-gated like every other
-declared file: the frontend renders them, it never writes them (see "What the UI
-renders, and what it stores").
+A Board is a document's complete definition: one `board.yaml` per document,
+holding every table with its columns, types, and formulas inline. It is the
+analogue of Grist's code-view file, which holds a whole document's schema and
+formulas in one artifact. A Board is how the document works, not how it looks:
+it is not a frontend page, it does not describe widgets or layout, and it is
+not split across `tables/` or `views/` directories. Schema and behavior are not
+separate; a column's type and its formula live together, as they do in Grist.
 
-Boards are the same kind of thing as the rest of the definition: a file an agent
-authors, that is diffable, reviewable, and statically checkable. They are
-separate from tables and access rules, which have their own files. A Board names
-tables and columns and widgets, and validation fails if any of those names do
-not resolve (a view referencing a dropped column fails, the same way a Wafer
-referencing an unknown table fails).
+A Board is the same kind of thing as the rest of the definition: a file an
+agent authors, that is diffable, reviewable, and statically checkable. It is
+separate from access rules, which have their own file. Because a Board is one
+file, it is atomic by construction: there is no partial state where a table
+references something that was never defined, because the whole definition is
+compiled together.
 
 The shape below is a sketch, not a settled schema. The intent is that a Board
 reads as a document, not as a data dump: a human (and an agent) can see at a
-glance which widgets exist, what each is bound to, and how the page is put
+glance which tables exist, what columns they have, and how the document is put
 together.
 
 ```yaml
-board: billing_overview
-title: Billing
+board: main
+tables:
+  customers:
+    columns:
+      name: text
+      email: text
+      is_vip: bool
+      joined: date
 
-widgets:
-  - name: invoice_grid
-    type: grid
-    table: invoices
-    columns: [number, customer, due, balance]
+      full_name:                     # formula: same as name, capitalized
+        formula: >-
+          upper(name)
 
-  - name: totals_chart
-    type: bar
-    source: {table: invoice_totals, group_by: month, value: sum}
+  invoices:
+    columns:
+      customer: {type: ref, target: customers}
+      issued: date
+      due: date
+      status: {type: choice, values: [draft, sent, paid, void]}
 
-  - name: status_key
-    type: static
-    content: "draft = Draft, sent = Outstanding, paid = Paid, void = Void"
-
-layout:
-  - row: [invoice_grid, totals_chart]
-  - row: [status_key]
+      days_overdue:                  # formula: days late, once sent
+        formula: >-
+          status == 'sent'
+          ? max(0, date_diff(today(), due, 'd'))
+          : 0
 ```
 
 ### What a Board names
 
-A Board binds widgets to data. The same vocabulary as Grist's column types
-applies, since Ordinator is Grist-shaped:
+A Board holds tables. The same vocabulary as Grist's column types applies,
+since Ordinator is Grist-shaped:
 
 - `text`, `numeric`, `int`, `bool`, `date`, `datetime` for scalar columns.
 - `choice` (one of a fixed set), `choicelist` (several of a fixed set).
@@ -657,43 +811,44 @@ applies, since Ordinator is Grist-shaped:
   references).
 - `attachments` for files.
 
-A widget's `source` says which table it reads and, when relevant, a filter or
-grouping. Validation checks that every table and column a Board names exists in
-the compiled schema, so a stale Board fails loudly instead of rendering blank.
+Validation checks that every table and column a Board references exists and is
+well-typed, so a stale Board fails loudly at apply time instead of silently
+misbehaving.
 
 ### Formatting rules
 
 The files should be easy to read the way Grist's code-view export is easy to
 read. Grist generates its code-view with consistent blank-line spacing between
-tables and between logical groups of columns, and Ordinator's Board files should
-do the same. These are the conventions:
+tables and between logical groups of columns, and Ordinator's Board files
+should do the same. These are the conventions:
 
-- **One Board per file.** `views/billing.yaml` holds the billing Board, and no
-  other. A directory of Boards reads like a table of contents.
-- **Blank line between every section.** Tables, widget definitions, and the
-  layout block are separated by one blank line, never jammed together.
-- **Blank line between widget definitions.** Each widget gets its own block with
-  a blank line separating it from the next, so a long Board does not read as one
-  wall of text.
+- **One Board per document.** `board.yaml` is the whole definition, and there
+  is no other.
+- **Blank line between every section.** Tables and logical groups of columns
+  are separated by one blank line, never jammed together.
+- **Blank line between tables.** Each table gets its own block with a blank
+  line separating it from the next, so a large Board does not read as one wall
+  of text.
 - **Comments say what things are, not which category they belong to.** A comment
-  on a widget says what the widget does or why it exists (`# overdue accounts`),
-  not a Grist-internal label like `# Stats` or `# Logical`.
-- **Two-space indentation** throughout, matching the tables and access YAML.
-- **List one column per line** in a widget's `columns`, and align them where the
-  names are of similar length. Do not pack many columns onto one line.
+  on a column says what the column does or why it exists, not a Grist-internal
+  label like `# Stats` or `# Logical`.
+- **Two-space indentation** throughout, matching the access YAML.
+- **List one column per line**, and align them where the names are of similar
+  length. Do not pack many columns onto one line.
 - **No trailing whitespace**, and a newline at the end of the file.
-- **Block scalars for long expressions.** A formula or filter longer than a
-  single readable line uses `>-` and breaks across lines (see the formula sketch
-  in "The shape, sketched" under Formulas).
+- **Block scalars for long expressions.** A formula longer than a single
+  readable line uses `>-` and breaks across lines (see the formula sketch in
+  "The shape, sketched" under Formulas).
 
 ### Open questions
 
-- Whether a Board is one page or one whole view, and whether tabs are a layout
-  property or a widget type (see "Flat versus nested").
-- How much of column width, sort, and visible-column-set belongs in the Board
-  versus in per-user prefs (see "What the UI renders, and what it stores").
-- Whether Boards validate in the frontend project (which owns widget schemas) or
-  somewhere else (see the widgets section above).
+- Whether a Board names frontend pages or screens at all, given Boards are not
+  for building frontends. This is unresolved and separate from the Board's
+  definition role.
+- How access rules reference the tables and columns a Board defines, and
+  whether `access.yaml` is validated against `board.yaml`.
+- Whether the whole definition in one file stays workable for very large
+  documents, or whether a compiler-level include mechanism is ever needed.
 
 ---
 
@@ -706,7 +861,7 @@ one viewer able to render either:
 feed/
   meta.yaml           # instance id, kind, version, generated_at
   capabilities/       # servitor: mechanism groups. ordinator: table schemas
-  definitions/        # servitor: the Wafers. ordinator: table and view YAML
+  definitions/        # servitor: the Wafers. ordinator: the Board YAML
   history/            # servitor: runs and node outcomes. ordinator: change log, outbox
   health.yaml         # daemon up, queue depth, last publish
 ```
@@ -985,13 +1140,24 @@ the formulas.
 ### Access rules and auth
 
 - **How do per-row and per-column access rules get compiled and enforced?**
-  Ordinator wants Grist-style ACLs. In a daemon model these are enforced as
-  filtering in the daemon's reads, but how that applies on top of the compiled
-  schema is unresolved, and it cannot be enforced for a raw file read anyway (a
-  bare SQLite client bypasses any filter).
+   Ordinator wants Grist-style ACLs. In a daemon model these are enforced as
+   filtering in the daemon's reads, but how that applies on top of the compiled
+   schema is unresolved, and it cannot be enforced for a raw file read anyway (a
+   bare SQLite client bypasses any filter).
+- **Authentication is OIDC, across the stack.** All three projects support
+   OpenID Connect against an operator-supplied identity provider, so a
+   deployment can connect its own IdP (for example Keycloak). Servitor and
+   Ordinator authenticate users through OIDC; neither is its own identity layer,
+   each trusts an IdP. Cerebror authenticates to both Servitor and Ordinator
+   from the app through OIDC, so the same identity works against whichever
+   backend(s) it is configured to reach. Ordinator maps the authenticated user
+   to an identity that access rules can reference. Unresolved: which flows to
+   support (authorization code, device flow for a CLI), how the IdP is
+   configured per document versus per deployment, and how an authenticated
+   identity maps to the `user` access-rule variable.
 - **How do a Servitor token and a role interact?** Per-Wafer, per-deployment,
-  or per-node, and how it composes with Servitor's per-node secret delivery
-  (ADR-0033). Unresolved.
+   or per-node, and how it composes with Servitor's per-node secret delivery
+   (ADR-0033). Unresolved.
 
 ### Sequencing
 
