@@ -53,8 +53,8 @@ explicit principle leads to local-optimum decisions that accumulate into
 structural debt.
 
 This principle is the reason the formula strategy (SPEC: Formulas) and many
-other questions are left open in IDEAS.md rather than resolved early: there is
-no concrete need yet to force the answer.
+other questions are left open rather than resolved early: there is no concrete
+need yet to force the answer.
 
 ### Consequences
 

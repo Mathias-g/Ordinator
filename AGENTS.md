@@ -26,9 +26,12 @@ how you, the agent, read it before editing and write it after.
 - **docs/adr/**: the decision log. Each significant decision, with its
   alternatives and rationale, recorded as a numbered, immutable ADR. This is
   where the "why" of the design lives.
-- **IDEAS.md**: a catch-all for promising directions that are not yet decided
-  or built. Not commitments; ideas move to an ADR (and then the SPEC/PLAN) when
-  they become real decisions, and are discarded when not.
+- **IDEAS.md**: a scratchpad for promising directions that are not yet decided
+  or built. Not commitments, and not a reference: do not rely on it as durable
+  documentation. Ideas move to an ADR (and then the SPEC/PLAN) when they become
+  real decisions, and are discarded when not. Once an idea is decided, its
+  context, alternatives, and rationale live in the ADR itself and the entry is
+  deleted from `IDEAS.md`; never point back at IDEAS.md.
 - **THREATS.md**: open, unsettled attack surfaces and things to investigate.
   Not decisions and not invariants yet; when one is resolved it moves to a
   test, the relevant SPEC section, Gotchas, or an ADR depending on what the
@@ -80,11 +83,14 @@ as a new ADR that supersedes the old one.
   this file.
 - **The process is enforced with automated checks.** (ADR-0004) Pre-commit plus
   CI gated by branch protection.
+- **Formulas are computed in the daemon, over an in-memory object model, with a
+  dependency graph.** (ADR-0005) The rejected alternatives (compile to SQL views,
+  stored columns only) and their rationale are in the ADR.
 
 Structural decisions that are settled but have not (yet) been given ADRs,
 because they are being treated as constraints of the design rather than choices
-to relitigate. They are recorded in SPEC.md and IDEAS.md. If one becomes
-contested, it earns an ADR:
+to relitigate. They are recorded in SPEC.md. If one becomes contested, it earns
+an ADR:
 
 - **The definition lives in text files; SQLite holds only data.** (SPEC: The
   artifact and the build step)
@@ -93,7 +99,6 @@ contested, it earns an ADR:
   (SPEC: Independence from Servitor)
 - **Ordinator does not own workflow.** No automations, schedules, branching, or
   outbound logic in its own config. (SPEC: What this is not)
-- **Formulas are pure and synchronous, with no I/O.** (SPEC: Formulas)
 
 ## The context layers
 
@@ -110,7 +115,9 @@ product/behavior spec and the decision log; the rest sits with the code.
 | Package `README.md` / docstring | Why the package is shaped this way: intent, invariants | yes   | no |
 | Commit message / PR body      | What a specific change did                         | immutable | no |
 
-Anything that does not belong to one of these layers does not go in the
+IDEAS.md is deliberately not a context layer. It is a scratchpad for not-yet-decided
+thinking; it owns no durable context, so nothing a future reader needs depends on
+it. Anything that does not belong to one of these layers does not go in the
 codebase.
 
 ## Reading before editing
@@ -168,7 +175,10 @@ one of these, discard it rather than inventing a home for it.
   when the blocking idea is worked into the SPEC/PLAN.
 - **Found a promising direction that is not yet decided or built?** `IDEAS.md`.
   It is not a commitment; it becomes an ADR and a SPEC section when it becomes a
-  real decision.
+  real decision. When it does, the ADR carries the full context, alternatives,
+  and rationale, and the idea is deleted from `IDEAS.md`; do not leave the
+  decided entry behind and do not point future readers back at it. It is a
+  scratchpad, not a reference.
 - **Learned a durable gotcha or invariant that no assertion can capture**,
   something about intent or rationale rather than behavior? Package README or
   docstring, or the Gotchas section of `SPEC.md` for cross-cutting operational
@@ -261,6 +271,12 @@ The automated checks enforce structure. This covers what they cannot:
   decision concerns (for example "SPEC: The compiler") as the anchor instead. A
   future reader of an ADR should understand the decision without knowing what
   the plan looked like on the day it was written.
+- **ADRs are self-contained.** An ADR must carry everything a future reader
+  needs to understand the decision: the context, the alternatives, and the
+  rationale. Do not point back at IDEAS.md, research notes, or session material
+  as the source of that context. IDEAS.md is a scratchpad and is not durable;
+  it cannot be relied on as a reference. If the research and reasoning behind a
+  choice matter enough to be recorded, they belong in the ADR itself.
 
 ### PLAN.md
 
