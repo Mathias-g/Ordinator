@@ -1,0 +1,13 @@
+repos:
+  - repo: local
+    hooks:
+      - id: adrlint
+        name: ADR front matter lint
+        entry: go run ./scripts/checks/adrlint
+        language: system
+        pass_filenames: false
+      - id: bookkeeping-reminder
+        name: bookkeeping reminder
+        entry: bash -c 'echo "Reminder: see the pre-commit checklist in AGENTS.md before pushing."'
+        language: system
+        pass_filenames: false
