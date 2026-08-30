@@ -207,10 +207,13 @@ tables:
       email: text
       is_vip: bool
       joined: date
-      full_name: {formula: "upper(name)"}                               # Text
-      email_ok: {formula: "matches(email, '@')"}                        # Info / regex
-      age_days: {formula: "date_diff(today(), joined, 'd')"}            # Date
-      tag: {formula: "is_vip ? 'vip' : 'normal'"}                       # Logical
+      full_name: {formula: "upper(name)"}                    # Text
+      email_ok: {formula: "matches(email, '@')"}             # Info / regex
+      age_days:
+        # Date
+        formula: >-
+          date_diff(today(), joined, 'd')
+      tag: {formula: "is_vip ? 'vip' : 'normal'"}            # Logical
   invoices:
     columns:
       customer: {type: ref, target: customers}
@@ -218,26 +221,43 @@ tables:
       due: date
       status: {type: choice, values: [draft, sent, paid, void]}
       # Object-model: forward traversal into the referenced row
-      customer_name: {formula: "customer.name"}                         # Grist (forward)
-      days_overdue: {formula: "status == 'sent' ? max(0, date_diff(today(), due, 'd')) : 0"}  # Date + Logical + Math
-      is_late: {formula: "days_overdue > 0"}                            # Logical
-      balance: {formula: "paid_amount"}                                 # (data column)
+      customer_name: {formula: "customer.name"}              # Grist (forward)
+      days_overdue:
+        # Date + Logical + Math
+        formula: >-
+          status == 'sent'
+          ? max(0, date_diff(today(), due, 'd'))
+          : 0
+      is_late: {formula: "days_overdue > 0"}                 # Logical
+      balance: {formula: "paid_amount"}                      # (data column)
   invoice_lines:
     columns:
       invoice: {type: ref, target: invoices}
       amount: number
       qty: number
       # Object-model: reverse traversal up to the parent
-      line_total: {formula: "amount * qty"}                             # Math
+      line_total: {formula: "amount * qty"}                  # Math
   invoice_totals:
     columns:
       invoice: {type: ref, target: invoices}
       # Object-model: reverse row set + aggregation over related children
-      sum: {formula: "sum(invoice.lines, .line_total)"}                 # Grist (reverse) + Math aggregate
-      line_count: {formula: "count(invoice.lines)"}                     # Stats
-      max_line: {formula: "max(map(invoice.lines, .line_total))"}       # Stats
-      mid_line: {formula: "median(map(invoice.lines, .line_total))"}    # Stats (host function)
-      status_word: {formula: "{'sent': 'Outstanding', 'paid': 'Paid', 'draft': 'Draft', 'void': 'Void'}[status]"}  # Lookup
+      sum: {formula: "sum(invoice.lines, .line_total)"}      # Grist (reverse) + Math aggregate
+      line_count: {formula: "count(invoice.lines)"}          # Stats
+      max_line:
+        # Stats
+        formula: >-
+          max(map(invoice.lines, .line_total))
+      mid_line:
+        # Stats (host function)
+        formula: >-
+          median(map(invoice.lines, .line_total))
+      status_word:
+        # Lookup
+        formula: >-
+          {'sent': 'Outstanding',
+           'paid': 'Paid',
+           'draft': 'Draft',
+           'void': 'Void'}[status]
 ```
 
 The scalar functions (Math, Text, Date, Logical, Stats) are the easy part. The
