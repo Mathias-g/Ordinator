@@ -228,6 +228,10 @@ How to behave:
 - **Resolving one of the open design questions in IDEAS.md.** These are
   deliberately not decided; resolving one is a decision that needs an ADR and a
   SPEC change, not a routine edit.
+- **Committing or pushing.** Do not commit or push on your own. Stage and leave
+  changes in the working tree, and ask the developer before committing or
+  pushing. The developer decides when, how (message style, branch), and whether
+  to push.
 
 ### Remind, but do not block, when
 

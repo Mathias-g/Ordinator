@@ -204,21 +204,24 @@ tables:
   # Customers: people we sell to.
   customers:
     columns:
-      name: text                    # display name
-      email: text                   # contact email
-      is_vip: bool                  # true for high-value customers
-      joined: date                  # when they signed up
+      name: text                     # display name
+      email: text                    # contact email
+      is_vip: bool                   # true for high-value customers
+      joined: date                   # when they signed up
 
-      full_name:                    # same as name, shown capitalized
+      full_name:                     # same as name, shown capitalized
         formula: >-
           upper(name)
-      email_ok:                     # whether the email looks valid
+
+      email_ok:                      # whether the email looks valid
         formula: >-
           matches(email, '@')
-      age_days:                     # days since they joined
+
+      age_days:                      # days since they joined
         formula: >-
           date_diff(today(), joined, 'd')
-      tag:                          # 'vip' for VIPs, else 'normal'
+
+      tag:                           # 'vip' for VIPs, else 'normal'
         formula: >-
           is_vip ? 'vip' : 'normal'
 
@@ -226,30 +229,34 @@ tables:
   invoices:
     columns:
       customer: {type: ref, target: customers}
-      issued: date                  # invoice date
-      due: date                     # payment deadline
+      issued: date                   # invoice date
+      due: date                      # payment deadline
       status: {type: choice, values: [draft, sent, paid, void]}
 
-      customer_name:                # pull the customer's name across the reference
+      customer_name:                 # pull the customer's name across the reference
         formula: >-
           customer.name
-      days_overdue:                 # days late, only meaningful once sent
+
+      days_overdue:                  # days late, only meaningful once sent
         formula: >-
           status == 'sent'
           ? max(0, date_diff(today(), due, 'd'))
           : 0
-      is_late:                      # true if we are past the deadline
+
+      is_late:                       # true if we are past the deadline
         formula: >-
           days_overdue > 0
-      balance: number               # how much is still unpaid (entered, not computed)
+
+      balance: number                # how much is still unpaid (entered, not computed)
 
   # Invoice lines: the individual line items on an invoice.
   invoice_lines:
     columns:
       invoice: {type: ref, target: invoices}   # which invoice this line belongs to
-      amount: number                # unit price
-      qty: number                   # how many units
-      line_total:                   # cost of this line
+      amount: number                 # unit price
+      qty: number                    # how many units
+
+      line_total:                    # cost of this line
         formula: >-
           amount * qty
 
@@ -257,19 +264,23 @@ tables:
   invoice_totals:
     columns:
       invoice: {type: ref, target: invoices}
-      sum:                          # total of all line totals on the invoice
+      sum:                           # total of all line totals on the invoice
         formula: >-
           sum(invoice.lines, .line_total)
-      line_count:                   # how many lines the invoice has
+
+      line_count:                    # how many lines the invoice has
         formula: >-
           count(invoice.lines)
-      max_line:                     # the largest single line total
+
+      max_line:                      # the largest single line total
         formula: >-
           max(map(invoice.lines, .line_total))
-      mid_line:                     # the middle line total (host function)
+
+      mid_line:                      # the middle line total (host function)
         formula: >-
           median(map(invoice.lines, .line_total))
-      status_word:                  # 'status' spelled out for display
+
+      status_word:                   # 'status' spelled out for display
         formula: >-
           {'sent': 'Outstanding',
            'paid': 'Paid',
@@ -588,6 +599,101 @@ mechanism, and what happens on first render before anything has emitted.
 linter. A renderer that shows a greyed placeholder and a warning badge, with the
 rest of the view working, is better than one that white-screens. Worth deciding
 early because it affects every widget's contract.
+
+---
+
+## Boards
+
+A Board is Ordinator's declared-UI artifact, the analogue of Servitor's Wafer: a
+YAML file describing one page or view of the frontend. It declares which widgets
+appear, what data each binds to, and how they are laid out. Boards live under
+`views/` (for example `views/billing.yaml`) and are PR-gated like every other
+declared file: the frontend renders them, it never writes them (see "What the UI
+renders, and what it stores").
+
+Boards are the same kind of thing as the rest of the definition: a file an agent
+authors, that is diffable, reviewable, and statically checkable. They are
+separate from tables and access rules, which have their own files. A Board names
+tables and columns and widgets, and validation fails if any of those names do
+not resolve (a view referencing a dropped column fails, the same way a Wafer
+referencing an unknown table fails).
+
+The shape below is a sketch, not a settled schema. The intent is that a Board
+reads as a document, not as a data dump: a human (and an agent) can see at a
+glance which widgets exist, what each is bound to, and how the page is put
+together.
+
+```yaml
+board: billing_overview
+title: Billing
+
+widgets:
+  - name: invoice_grid
+    type: grid
+    table: invoices
+    columns: [number, customer, due, balance]
+
+  - name: totals_chart
+    type: bar
+    source: {table: invoice_totals, group_by: month, value: sum}
+
+  - name: status_key
+    type: static
+    content: "draft = Draft, sent = Outstanding, paid = Paid, void = Void"
+
+layout:
+  - row: [invoice_grid, totals_chart]
+  - row: [status_key]
+```
+
+### What a Board names
+
+A Board binds widgets to data. The same vocabulary as Grist's column types
+applies, since Ordinator is Grist-shaped:
+
+- `text`, `numeric`, `int`, `bool`, `date`, `datetime` for scalar columns.
+- `choice` (one of a fixed set), `choicelist` (several of a fixed set).
+- `ref` (a single reference to another table) and `reflist` (several
+  references).
+- `attachments` for files.
+
+A widget's `source` says which table it reads and, when relevant, a filter or
+grouping. Validation checks that every table and column a Board names exists in
+the compiled schema, so a stale Board fails loudly instead of rendering blank.
+
+### Formatting rules
+
+The files should be easy to read the way Grist's code-view export is easy to
+read. Grist generates its code-view with consistent blank-line spacing between
+tables and between logical groups of columns, and Ordinator's Board files should
+do the same. These are the conventions:
+
+- **One Board per file.** `views/billing.yaml` holds the billing Board, and no
+  other. A directory of Boards reads like a table of contents.
+- **Blank line between every section.** Tables, widget definitions, and the
+  layout block are separated by one blank line, never jammed together.
+- **Blank line between widget definitions.** Each widget gets its own block with
+  a blank line separating it from the next, so a long Board does not read as one
+  wall of text.
+- **Comments say what things are, not which category they belong to.** A comment
+  on a widget says what the widget does or why it exists (`# overdue accounts`),
+  not a Grist-internal label like `# Stats` or `# Logical`.
+- **Two-space indentation** throughout, matching the tables and access YAML.
+- **List one column per line** in a widget's `columns`, and align them where the
+  names are of similar length. Do not pack many columns onto one line.
+- **No trailing whitespace**, and a newline at the end of the file.
+- **Block scalars for long expressions.** A formula or filter longer than a
+  single readable line uses `>-` and breaks across lines (see the formula sketch
+  in "The shape, sketched" under Formulas).
+
+### Open questions
+
+- Whether a Board is one page or one whole view, and whether tabs are a layout
+  property or a widget type (see "Flat versus nested").
+- How much of column width, sort, and visible-column-set belongs in the Board
+  versus in per-user prefs (see "What the UI renders, and what it stores").
+- Whether Boards validate in the frontend project (which owns widget schemas) or
+  somewhere else (see the widgets section above).
 
 ---
 
