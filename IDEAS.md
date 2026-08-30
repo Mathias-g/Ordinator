@@ -175,40 +175,71 @@ documents/
 
 ### Schema changes and the apply cycle
 
-Because the schema is text and the data is in the SQLite file, editing the
-schema is a migration, not a silent rewrite. A schema edit can destroy data if
-it is treated naively: renaming a column in YAML must not wipe the column's
-values out of every row. The principle:
+Because the schema is text (the Board) and the data is in the SQLite file,
+editing the schema is a migration, not a silent rewrite. A schema edit can
+destroy data if it is treated naively: renaming a column in the Board must not
+wipe the column's values out of every row.
 
-**Destructive changes must be explicit and visible; the default is safe.**
+**The compiler is the whole thing.** It parses the Board YAML, validates it
+(types, references, formula syntax), diffs the old definition against the new
+one, plans the migration, and applies it. The diff-and-apply part is the
+compiler's **migration step**: it is the established declarative-schema
+migration model (the same idea as Atlas and SchemaHero, where you declare the
+desired state and the tool computes the plan, rather than hand-writing each
+migration the way Flyway and Liquibase do). "Compiler" is the right name for
+the whole thing because it does more than migrate: it parses, validates,
+analyzes (including building the formula dependency graph), and emits SQLite
+schema objects. The migration is one phase of that.
 
-- **Column identity is a stable id, not the name.** Columns carry an internal
-  id; the YAML name is a human-readable label. Renaming the label never touches
-  the data, because the data is keyed by the id, not the name. This makes a
-  rename safe by construction (the common, easy case).
+**The core principle: destructive changes must be explicit and visible; the
+default is safe.**
+
+**Column identity is a stable id, not the name.** Columns carry an internal
+id; the YAML name is a human-readable label. The data in SQLite is keyed by
+the id, not the name, so renaming the label never touches the data. This makes
+a rename safe by construction, and it is what makes a rename *detectable*: the
+compiler can match columns by id across the old and new definition, so a column
+whose id is unchanged but whose label changed is a rename, by construction.
+
+**SQLite names alone cannot tell a rename from a drop-and-add.** If the new
+Board says `full_name` where the old said `name`, the SQLite file only knows
+the old column `name`; it has no link to `full_name`. Looking at names gives an
+ambiguous picture: it could be a rename (carry the data) or a drop-and-add
+(delete `name` and its data, create a fresh empty `full_name`). The SQLite file
+cannot resolve this on its own. That is why the compiler must not guess.
+
+- **A plain column removal is destructive by intent.** It shows up loudly in
+  dry-run ("DROP COLUMN customers.age, 10,000 values") and is confirmed before
+  it happens.
+- **The ambiguous case is refused, not guessed.** When the compiler cannot
+  classify a change (a removed column where a new same-typed column appeared,
+  which could be either a rename or a drop-and-add; or a type change with no
+  migration), it fails and asks which the author meant, rather than silently
+  choosing. This is the "refuses to guess" behavior.
 - **Renames are label changes, not data operations.** A rename carries the data
   over. It never looks destructive.
 - **Type changes and drops are explicit migrations.** Changing a column's type,
   or removing a column, genuinely changes the data's shape, so it must be
   declared as what it is, not inferred. The compiler does not guess "is this a
   rename or a drop-and-add?"; the author says which.
-- **`apply` refuses to guess and refuses silent loss.** If the dry-run sees a
-  change it cannot classify as safe (a removed column with no rename, a type
-  change with no migration), it fails and asks, rather than proceeding.
 - **The plan/dry-run step surfaces destruction.** `apply` shows a loud, explicit
-  diff ("DROP COLUMN customers.age, 10,000 values") before it happens, so an
-  operator or agent sees the cost of a destructive change ahead of time.
+  diff before it happens, so an operator or agent sees the cost of a destructive
+  change ahead of time.
 - **A backup or recovery path is the backstop.** Even with the above, a
   destructive act is preceded by a backup or is reversible, so a mistake has a
   recovery path, not just a warning.
 
 Open questions:
 
-- How a rename, type change, or drop is expressed in the YAML (an explicit
+- How a rename, type change, or drop is expressed in the Board: an explicit
   `rename:`/`migrate:`/`drop:` directive, versus the compiler inferring it from
-  the old and new schema and refusing anything ambiguous).
-- How `apply` diffs old vs new schema to classify a change as safe, a rename, a
-  type migration, or a drop, and where that diff is computed and stored.
+  the old and new definition and refusing anything ambiguous.
+- Whether the stable column id lives in the Board (the author sees it) or is
+  assigned and carried by the compiler, so the id can match columns across
+  edits without the author managing it.
+- How the compiler diffs old vs new definition to classify a change as safe, a
+  rename, a type migration, or a drop, and where that diff is computed and
+  stored.
 - Whether `apply` can roll back if a migration fails partway.
 
 ---
