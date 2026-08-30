@@ -207,13 +207,18 @@ tables:
       email: text
       is_vip: bool
       joined: date
-      full_name: {formula: "upper(name)"}                    # Text
-      email_ok: {formula: "matches(email, '@')"}             # Info / regex
+      full_name:
+        formula: >-
+          upper(name)
+      email_ok:
+        formula: >-
+          matches(email, '@')
       age_days:
-        # Date
         formula: >-
           date_diff(today(), joined, 'd')
-      tag: {formula: "is_vip ? 'vip' : 'normal'"}            # Logical
+      tag:
+        formula: >-
+          is_vip ? 'vip' : 'normal'
 
   invoices:
     columns:
@@ -221,41 +226,44 @@ tables:
       issued: date
       due: date
       status: {type: choice, values: [draft, sent, paid, void]}
-      # Object-model: forward traversal into the referenced row
-      customer_name: {formula: "customer.name"}              # Grist (forward)
+      customer_name:
+        formula: >-
+          customer.name
       days_overdue:
-        # Date + Logical + Math
         formula: >-
           status == 'sent'
           ? max(0, date_diff(today(), due, 'd'))
           : 0
-      is_late: {formula: "days_overdue > 0"}                 # Logical
-      balance: {formula: "paid_amount"}                      # (data column)
+      is_late:
+        formula: >-
+          days_overdue > 0
+      balance: number
 
   invoice_lines:
     columns:
       invoice: {type: ref, target: invoices}
       amount: number
       qty: number
-      # Object-model: reverse traversal up to the parent
-      line_total: {formula: "amount * qty"}                  # Math
+      line_total:
+        formula: >-
+          amount * qty
 
   invoice_totals:
     columns:
       invoice: {type: ref, target: invoices}
-      # Object-model: reverse row set + aggregation over related children
-      sum: {formula: "sum(invoice.lines, .line_total)"}      # Grist (reverse) + Math aggregate
-      line_count: {formula: "count(invoice.lines)"}          # Stats
+      sum:
+        formula: >-
+          sum(invoice.lines, .line_total)
+      line_count:
+        formula: >-
+          count(invoice.lines)
       max_line:
-        # Stats
         formula: >-
           max(map(invoice.lines, .line_total))
       mid_line:
-        # Stats (host function)
         formula: >-
           median(map(invoice.lines, .line_total))
       status_word:
-        # Lookup
         formula: >-
           {'sent': 'Outstanding',
            'paid': 'Paid',
