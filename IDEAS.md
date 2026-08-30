@@ -195,7 +195,9 @@ relational model and are deliberately out of scope:
 ### The shape, sketched
 
 Illustrative, not a settled schema; the point is that most of the interesting
-work is the object-model traversal, not the scalar functions:
+work is the object-model traversal, not the scalar functions. Formulas are
+written in Expr (ADR-0006), with the object-model and date/finance surface
+provided by host-registered functions:
 
 ```yaml
 tables:
@@ -205,10 +207,10 @@ tables:
       email: text
       is_vip: bool
       joined: date
-      full_name: {formula: "$uppercase(name)"}                       # Text
-      email_ok: {formula: "$matches(email, '@')"}                    # Info / regex
-      age_days: {formula: "$date_diff($today(), joined, 'd')"}       # Date
-      tag: {formula: "$iif(is_vip, 'vip', 'normal')"}                # Logical
+      full_name: {formula: "upper(name)"}                               # Text
+      email_ok: {formula: "matches(email, '@')"}                        # Info / regex
+      age_days: {formula: "date_diff(today(), joined, 'd')"}            # Date
+      tag: {formula: "is_vip ? 'vip' : 'normal'"}                       # Logical
   invoices:
     columns:
       customer: {type: ref, target: customers}
@@ -216,26 +218,26 @@ tables:
       due: date
       status: {type: choice, values: [draft, sent, paid, void]}
       # Object-model: forward traversal into the referenced row
-      customer_name: {formula: "customer.name"}                       # Grist (forward)
-      days_overdue: {formula: "$iif(status = 'sent', $max(0, $date_diff($today(), due, 'd')), 0)"}  # Date + Logical + Math
-      is_late: {formula: "days_overdue > 0"}                          # Logical
-      balance: {formula: "paid_amount"}                               # (data column)
+      customer_name: {formula: "customer.name"}                         # Grist (forward)
+      days_overdue: {formula: "status == 'sent' ? max(0, date_diff(today(), due, 'd')) : 0"}  # Date + Logical + Math
+      is_late: {formula: "days_overdue > 0"}                            # Logical
+      balance: {formula: "paid_amount"}                                 # (data column)
   invoice_lines:
     columns:
       invoice: {type: ref, target: invoices}
       amount: number
       qty: number
       # Object-model: reverse traversal up to the parent
-      line_total: {formula: "amount * qty"}                           # Math
+      line_total: {formula: "amount * qty"}                             # Math
   invoice_totals:
     columns:
       invoice: {type: ref, target: invoices}
       # Object-model: reverse row set + aggregation over related children
-      sum: {formula: "$sum(invoice.lines.line_total)"}                # Grist (reverse) + Math aggregate
-      line_count: {formula: "$count(invoice.lines)"}                  # Stats
-      max_line: {formula: "$max(invoice.lines.line_total)"}           # Stats
-      mid_line: {formula: "$median(invoice.lines.line_total)"}        # Stats
-      status_word: {formula: "$lookup({'sent':'Outstanding','paid':'Paid','draft':'Draft','void':'Void'}, invoice.status)"}  # Lookup
+      sum: {formula: "sum(invoice.lines, .line_total)"}                 # Grist (reverse) + Math aggregate
+      line_count: {formula: "count(invoice.lines)"}                     # Stats
+      max_line: {formula: "max(map(invoice.lines, .line_total))"}       # Stats
+      mid_line: {formula: "median(map(invoice.lines, .line_total))"}    # Stats (host function)
+      status_word: {formula: "{'sent': 'Outstanding', 'paid': 'Paid', 'draft': 'Draft', 'void': 'Void'}[status]"}  # Lookup
 ```
 
 The scalar functions (Math, Text, Date, Logical, Stats) are the easy part. The
