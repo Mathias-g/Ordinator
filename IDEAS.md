@@ -214,6 +214,7 @@ tables:
         formula: >-
           date_diff(today(), joined, 'd')
       tag: {formula: "is_vip ? 'vip' : 'normal'"}            # Logical
+
   invoices:
     columns:
       customer: {type: ref, target: customers}
@@ -230,6 +231,7 @@ tables:
           : 0
       is_late: {formula: "days_overdue > 0"}                 # Logical
       balance: {formula: "paid_amount"}                      # (data column)
+
   invoice_lines:
     columns:
       invoice: {type: ref, target: invoices}
@@ -237,6 +239,7 @@ tables:
       qty: number
       # Object-model: reverse traversal up to the parent
       line_total: {formula: "amount * qty"}                  # Math
+
   invoice_totals:
     columns:
       invoice: {type: ref, target: invoices}
