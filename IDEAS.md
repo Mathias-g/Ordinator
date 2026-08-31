@@ -29,6 +29,15 @@ before anything is applied.
 
 ### Parity is a baseline, not a constraint
 
+Reference material for parity, where it lives locally:
+
+- **Grist's own docs** are forked and cloned at `~/Development/grist-help`
+  (the upstream `gristlabs/grist-help` repo). It is the authoritative source for
+  how Grist behaves, including its function reference at
+  `help/en/docs/functions.md`, and is where to look when deciding what parity
+  means for a given feature. Read it directly rather than keeping a copy in this
+  repo, so the reference cannot drift from upstream.
+
 "Grist feature parity" is the target user experience and vocabulary, not a rule
 that we copy Grist's answers to every question. Grist's design is the output of
 its own priorities (a hosted multitenant SaaS, per-document sandboxed Python,
