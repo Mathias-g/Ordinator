@@ -34,8 +34,8 @@ it was written. It is not a diary of the moment.
   decision to the SPEC section it concerns (for example "SPEC: The compiler")
   instead.
 - Do **not** describe the current state of the codebase (what is or is not
-  built yet). That lives in PLAN.md and the SPEC's Status section, both of
-  which are meant to drift.
+  built yet). That lives in PLAN.md and SPEC.md's intro, both of which are
+  meant to drift.
 - Do **not** write an ADR to describe current state, or for a change with no
   contested choice. ADRs are for decisions with real alternatives someone might
   later reverse.

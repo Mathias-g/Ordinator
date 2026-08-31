@@ -182,74 +182,20 @@ documents/
     data.sqlite                   # the data, not the definition
 ```
 
-### Schema changes and the apply cycle
+---
 
-Because the schema is text (the Board) and the data is in the SQLite file,
-editing the schema is a migration, not a silent rewrite. A schema edit can
-destroy data if it is treated naively: renaming a column in the Board must not
-wipe the column's values out of every row.
+## Schema changes and the apply cycle
 
-**The compiler is the whole thing.** It parses the Board YAML, validates it
-(types, references, formula syntax), diffs the old definition against the new
-one, plans the migration, and applies it. The diff-and-apply part is the
-compiler's **migration step**: it is the established declarative-schema
-migration model (the same idea as Atlas and SchemaHero, where you declare the
-desired state and the tool computes the plan, rather than hand-writing each
-migration the way Flyway and Liquibase do). "Compiler" is the right name for
-the whole thing because it does more than migrate: it parses, validates,
-analyzes (including building the formula dependency graph), and emits SQLite
-schema objects. The migration is one phase of that.
+The settled behavior lives in SPEC (Schema changes and the apply cycle) and
+ADR-0007. What is still open:
 
-**The core principle: destructive changes must be explicit and visible; the
-default is safe.**
-
-**Column identity is a stable id, not the name.** Columns carry an internal
-id; the YAML name is a human-readable label. The data in SQLite is keyed by
-the id, not the name, so renaming the label never touches the data. This makes
-a rename safe by construction, and it is what makes a rename *detectable*: the
-compiler can match columns by id across the old and new definition, so a column
-whose id is unchanged but whose label changed is a rename, by construction.
-
-**SQLite names alone cannot tell a rename from a drop-and-add.** If the new
-Board says `full_name` where the old said `name`, the SQLite file only knows
-the old column `name`; it has no link to `full_name`. Looking at names gives an
-ambiguous picture: it could be a rename (carry the data) or a drop-and-add
-(delete `name` and its data, create a fresh empty `full_name`). The SQLite file
-cannot resolve this on its own. That is why the compiler must not guess.
-
-- **A plain column removal is destructive by intent.** It shows up loudly in
-  dry-run ("DROP COLUMN customers.age, 10,000 values") and is confirmed before
-  it happens.
-- **The ambiguous case is refused, not guessed.** When the compiler cannot
-  classify a change (a removed column where a new same-typed column appeared,
-  which could be either a rename or a drop-and-add; or a type change with no
-  migration), it fails and asks which the author meant, rather than silently
-  choosing. This is the "refuses to guess" behavior.
-- **Renames are label changes, not data operations.** A rename carries the data
-  over. It never looks destructive.
-- **Type changes and drops are explicit migrations.** Changing a column's type,
-  or removing a column, genuinely changes the data's shape, so it must be
-  declared as what it is, not inferred. The compiler does not guess "is this a
-  rename or a drop-and-add?"; the author says which.
-- **The plan/dry-run step surfaces destruction.** `apply` shows a loud, explicit
-  diff before it happens, so an operator or agent sees the cost of a destructive
-  change ahead of time.
-- **A backup or recovery path is the backstop.** Even with the above, a
-  destructive act is preceded by a backup or is reversible, so a mistake has a
-  recovery path, not just a warning.
-
-Open questions:
-
-- How a rename, type change, or drop is expressed in the Board: an explicit
-  `rename:`/`migrate:`/`drop:` directive, versus the compiler inferring it from
-  the old and new definition and refusing anything ambiguous.
-- Whether the stable column id lives in the Board (the author sees it) or is
-  assigned and carried by the compiler, so the id can match columns across
-  edits without the author managing it.
-- How the compiler diffs old vs new definition to classify a change as safe, a
-  rename, a type migration, or a drop, and where that diff is computed and
-  stored.
-- Whether `apply` can roll back if a migration fails partway.
+- Whether `apply` can roll back if a migration fails partway, and what the
+  recovery story is when it cannot.
+- How the plan diff is rendered and what an authoring app reads to show it
+  before apply. Where the diff is computed from is settled (ADR-0008): the
+  last applied definition, snapshotted in the SQLite metadata.
+- Which conversions belong in the safe-widening table for automatic type
+  changes, and where the line to the two-step recipe sits.
 
 ---
 
@@ -861,6 +807,10 @@ since Ordinator is Grist-shaped:
 - `ref` (a single reference to another table) and `reflist` (several
   references).
 - `attachments` for files.
+
+Every column also carries a stable random id, minted by tooling at authoring
+time (ADR-0007); the column's name is a human-readable label. The compiler
+refuses a missing or duplicate id.
 
 Validation checks that every table and column a Board references exists and is
 well-typed, so a stale Board fails loudly at apply time instead of silently

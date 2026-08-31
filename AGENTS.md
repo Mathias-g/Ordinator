@@ -68,24 +68,16 @@ In practice:
 
 ## Decisions already made (recorded, not locked)
 
-These are decisions already made and recorded in ADRs, with their alternatives
-and rationale. They are not open by default, but they are not off-limits either:
-the ADR is where any challenge starts. If you think one of these is wrong, or
-that a new decision is needed, raise it. Read the ADR's rationale first, then
-make the case. A change is not a routine edit; it is a new decision, recorded
-as a new ADR that supersedes the old one.
+The decision log is `docs/adr/`. Every ADR there records a decision already
+made, with its alternatives and rationale. They are not open by default, but
+they are not off-limits either: the ADR is where any challenge starts. If you
+think one of these is wrong, or that a new decision is needed, raise it. Read
+the ADR's rationale first, then make the case. A change is not a routine edit;
+it is a new decision, recorded as a new ADR that supersedes the old one.
 
-- **Decisions are recorded as MADR ADRs in `docs/adr/`.** (ADR-0001) A single
-  global numbered sequence, immutable, with `scope` and `interface-impact`
-  fields.
-- **BSSN is the guiding principle.** (ADR-0002)
-- **Context lives in the codebase.** (ADR-0003) The layers and routing rule in
-  this file.
-- **The process is enforced with automated checks.** (ADR-0004) Pre-commit plus
-  CI gated by branch protection.
-- **Formulas are computed in the daemon, over an in-memory object model, with a
-  dependency graph.** (ADR-0005) The rejected alternatives (compile to SQL views,
-  stored columns only) and their rationale are in the ADR.
+Read the log by the `scope` field rather than whole:
+
+    grep -rl "<area>" docs/adr/
 
 Structural decisions that are settled but have not (yet) been given ADRs,
 because they are being treated as constraints of the design rather than choices
@@ -117,8 +109,10 @@ product/behavior spec and the decision log; the rest sits with the code.
 
 IDEAS.md is deliberately not a context layer. It is a scratchpad for not-yet-decided
 thinking; it owns no durable context, so nothing a future reader needs depends on
-it. Anything that does not belong to one of these layers does not go in the
-codebase.
+it. PLAN.md is the same kind of artifact: it is derived from the current state of
+the codebase versus what the SPEC says the product should do, so it is a tracking
+layer, not a context layer, and owns no durable context either. Anything that
+does not belong to one of these layers does not go in the codebase.
 
 ## Reading before editing
 
@@ -189,6 +183,31 @@ one of these, discard it rather than inventing a home for it.
 
 When something could live as either a test or a prose line, the test wins. It
 is enforced; the prose is not.
+
+### Resolving an open question (the IDEAS loop)
+
+Open design questions live in `IDEAS.md`, grouped under the area they gate.
+When a session resolves one, work the loop in this order and finish it in the
+same change; a half-landed decision is the drift this exists to prevent:
+
+1. **Decide in conversation with the developer.** Explore the options, make a
+   recommendation, get a clear answer. Do not resolve an open question as a
+   routine edit.
+2. **Draft the ADR** (next number, `status: proposed`). It must be
+   self-contained: context, alternatives, rejection reasons, rationale. Nothing
+   in it points back at `IDEAS.md`.
+3. **Write or extend the SPEC section** so it carries the full settled
+   behavior, including durable context that was in the IDEAS entry (the SPEC
+   section is the reference; IDEAS is not).
+4. **Update `IDEAS.md`.** Delete the decided entry; if a whole section is
+   decided, remove the section, not just the question. Do not leave a pointer
+   back at what was deleted; the ADR and SPEC anchor are the record. Any
+   remaining open sub-questions stay in IDEAS, under the same area, so the
+   scratchpad keeps being the list of what is still open.
+5. **Flip the ADR to `accepted`** once the developer confirms the draft.
+6. **Verify no context was lost.** For moved prose, compare word counts
+   against the previous commit (the IDEAS delta should reappear in SPEC or the
+   ADR). Anything genuinely discarded, say so plainly in the session summary.
 
 ## Working with the developer
 
@@ -306,7 +325,7 @@ The automated checks enforce structure. This covers what they cannot:
 ### Tests
 
 - Live per package. Run them with the project's test command once it exists
-  (see the Status section of this file).
+  (see "Building, testing, and releasing").
 - Assert the contract and documented behavior, not implementation internals. A
   test pinning an incidental detail breaks on every refactor.
 
