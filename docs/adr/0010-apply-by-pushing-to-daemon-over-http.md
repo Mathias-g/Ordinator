@@ -34,34 +34,35 @@ file-based, CI-driven process hands the new definition to a running daemon.
   through its plan/apply machinery, never be written behind its back.
 - CI, an agent, and a human must drive apply the same way, with no interactive
   session required (ADR-0007, SPEC: Schema changes and the apply cycle).
-- Ordinator is independent of Servitor (SPEC: Independence from Servitor). The
-  mechanism must be a published standard useful to anyone, not tied to a
-  specific client.
-- The daemon already serves data continuously and is intended to expose an
-  HTTP API for reads and writes (ADR-0005: "Consumers (the CLI, the HTTP API,
-  Cerebror) read").
+- Ordinator is independent of other projects (SPEC: Independence from
+  Servitor). The mechanism must be useful to anyone, not tied to a specific
+  client.
+- The daemon is a server that serves data continuously (SPEC: The compiler).
 
 ## Considered options
 
 - **Push over the daemon's HTTP API.** A client sends the new definition
   (the Board and/or the access rules) to the daemon over its HTTP API, and the
-  daemon validates, plans, and applies it against the live SQLite file. CI is
-  one such client; it does not touch the server's filesystem.
+  daemon validates, plans, and applies it against the live SQLite file. The
+  client does not touch the server's filesystem. The CLI is one such client:
+  it talks to the daemon as an HTTP client, like any other tool.
 - **The daemon pulls from git.** The daemon watches (or fetches on a hook) a git
   repository, and applies the definition when the file changes. CI only merges
   the change to main.
-- **SSH / agent-based push.** CI copies the file to the host and runs a command
-  (Ansible, `scp` plus a reload), which the daemon then picks up.
+- **Agent-based push to the host.** A client copies the file to the host and
+  runs a command (Ansible, `scp` plus a reload), which the daemon then picks up.
 
 ## Decision outcome
 
-Chosen option: "Push over the daemon's HTTP API". A client hands the new
+Chosen option: "Push over the daemon's HTTP API". A client sends the new
 definition to the daemon over its HTTP API, and the daemon validates, plans,
 and applies it. The daemon is authoritative over whether and how the change is
-applied; the client (CI, an agent, a human, or any tool) decides when to send
-it. This keeps the text authored and reviewed outside the daemon, keeps the
-daemon the sole writer of the live data, and gives CI a plain HTTP call to make
-after a merge, no interactive session needed.
+applied; the client (CI, an agent, a human, the CLI, or any tool) decides when
+to send it. The CLI is an HTTP client of the daemon, the same way any other
+tool is; it reaches the daemon over its HTTP API rather than by another path.
+This keeps the text authored and reviewed outside the daemon, keeps the daemon
+the sole writer of the live data, and lets CI apply a merge with no interactive
+session.
 
 ### Why the other options were rejected
 
@@ -72,22 +73,23 @@ after a merge, no interactive session needed.
   and it re-introduces the file-watching/polling machinery the push model
   avoids. It works, but it makes the daemon depend on an external source of
   truth it does not otherwise have.
-- **SSH / agent-based push** requires the CI step to have credentials to the
-  host and to write files onto it, and it makes the server a passive recipient
-  rather than the authority on validation and apply. It also needs the daemon
-  to notice the written file, which reintroduces the same watching problem.
+- **Agent-based push to the host** requires the client to have credentials to
+  the host and to write files onto it, and it makes the server a passive
+  recipient rather than the authority on validation and apply. It also needs
+  the daemon to notice the written file, which reintroduces the same watching
+  problem.
 
 ### Consequences
 
-- Good: CI, an agent, a human, and any workflow tool drive apply identically,
-  as an authenticated HTTP call to the daemon. No interactive session, no
-  host filesystem access, no git dependency in the daemon.
+- Good: CI, an agent, a human, and the CLI drive apply identically, as HTTP
+  calls to the daemon. No interactive session, no host filesystem access, no
+  git dependency in the daemon.
 - Good: the daemon remains the sole writer of the live SQLite file and the
   authority on validation, planning, and applying (SPEC: The compiler).
 - Good: the mechanism is a published HTTP standard, so it stays within the
-  independence constraint: Servitor, or anyone else, is merely one HTTP client.
-- Bad: the daemon must expose an apply endpoint and authenticate it. This is
-  new surface on the daemon control protocol (see Interface notes).
+  independence constraint: any client is merely an HTTP client of the daemon.
+- Bad: the daemon must expose an apply endpoint and authenticate it. This is new
+  surface on the daemon control protocol (see Interface notes).
 - Neutral: the client is responsible for deciding *when* to push; the daemon
   does not watch for changes on its own. Whether the daemon proactively
   reports that a Board is ahead of what is applied (drift) is a separate,
@@ -98,24 +100,24 @@ after a merge, no interactive session needed.
 A behavior test, once the project has code, pins: pushing a definition over the
 daemon's HTTP API applies it to the live SQLite file, a push carrying a
 destructive change is refused without confirmation, and a Board committed but
-not applied is reported as drift at plan time. The exact request and response
-shape is not fixed here, only that apply happens by pushing the definition to
-the daemon over HTTP.
+not applied is reported as drift at plan time. The exact endpoint, request and
+response shape, and authentication are not fixed here; only that apply happens
+by pushing the definition to the daemon over HTTP.
 
 ## Interface notes
 
 This is a `new` interface impact. It establishes that the daemon's HTTP API
-accepts a definition change (a Board and/or access rules) from a client and
-applies it, rather than the daemon fetching or watching for it. The exact
-endpoint, request/response schema, and authentication are not settled here and
-are left to the control-protocol design; what is settled is the push model:
-the client sends the definition, the daemon is authoritative over applying it.
+accepts a definition change (a Board and/or the access rules) from a client and
+applies it, rather than the daemon fetching or watching for it. The CLI is an
+HTTP client of the daemon and drives apply through this API like any other
+tool. The exact endpoint, request/response schema, and authentication are not
+settled here and are left to the control-protocol design; what is settled is
+the push model over the daemon's HTTP API.
 
 ## More information
 
 - ADR-0007: renames are applicable in CI with no human present, which this
   decision makes possible.
 - ADR-0008: the last-applied snapshot the daemon diffs against when applying.
-- ADR-0005: the daemon hosts the object model and serves consumers including
-  the HTTP API.
+- ADR-0005: the daemon hosts the object model and serves consumers.
 - SPEC: The compiler, SPEC: Schema changes and the apply cycle.

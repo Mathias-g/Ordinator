@@ -118,11 +118,12 @@ an authoring app (same anchor).
 ## How a definition change is applied
 
 A definition change is applied by pushing it to the daemon over its HTTP API
-(ADR-0010). A client, which can be CI, an agent, a human, or any tool, sends
-the new definition (the Board and/or the access rules) to the daemon, and the
-daemon validates, plans, and applies it against the live SQLite file. The
+(ADR-0010). A client, which can be CI, an agent, a human, the CLI, or any tool,
+sends the new definition (the Board and/or the access rules) to the daemon, and
+the daemon validates, plans, and applies it against the live SQLite file. The
 daemon is authoritative over whether and how the change is applied; the client
-decides when to send it. The daemon does not watch or fetch the definition
-from git on its own. CI plans over the committed text and then makes a plain
-HTTP call to apply after a merge, with no interactive session.
+decides when to send it. The CLI is an HTTP client of the daemon, the same way
+any other tool is. The daemon does not watch or fetch the definition from git
+on its own. CI plans over the committed text and then makes an HTTP call to
+apply after a merge, with no interactive session.
 

@@ -189,7 +189,8 @@ documents/
 The settled behavior lives in SPEC (Schema changes and the apply cycle) and
 ADR-0007. How a change is applied is settled (ADR-0010): a client pushes the
 new definition to the daemon over its HTTP API, and the daemon validates,
-plans, and applies it. What is still open:
+plans, and applies it. The CLI is an HTTP client of the daemon. What is still
+open:
 
 - Whether the daemon proactively reports drift (that a Board committed but not
   applied is ahead of the live schema) without being asked. Apply itself is
