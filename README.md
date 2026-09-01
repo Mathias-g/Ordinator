@@ -8,22 +8,23 @@ SQLite, the way a spreadsheet works. What sets it apart is how you work with
 it: Grist is worked through a GUI, Ordinator through an agent.
 
 Because an agent, not a GUI, is what reads and writes the definition, the whole
-definition is a text file: the Board. An agent opens a document and sees every
-table, column, and formula in one place. It is diffable, reviewable, and
-statically checkable. An agent authors it, a human reviews the diff in a PR,
-and a compiler turns the reviewed YAML into a migrated SQLite schema, with a
-plan/dry-run step before anything destructive is applied.
+definition is a text file: the Board, the structure and behavior of a document
+together. An agent opens a document and sees every table, column, and formula
+in one place. It is diffable, reviewable, and statically checkable. An agent
+authors it, a human reviews the diff in a PR, and a compiler turns the reviewed
+YAML into a migrated SQLite schema, with a plan/dry-run step before anything
+destructive is applied.
 
 ## How it is put together
 
-- **The Board**: one `board.yaml` per document, holding every table, column
+- **The Boards**: one `board.yaml` per document, holding every table, column
   type, and formula. Access rules live in their own `access.yaml`.
 - **The daemon** owns the document folder and its single write connection. It
   hosts the compiler, computes formulas over an in-memory model with a
   dependency graph, and serves data continuously.
-- **The CLI** is the control plane. It drives the plan/apply cycle that turns a
-  changed Board into a migrated schema, surfacing destructive changes before
-  they are applied.
+- **The CLI** is the control plane: how you drive the daemon. You use it to
+  inspect a document, plan and apply schema changes, and operate the running
+  system. CI, an agent, and a human drive it the same way.
 
 Ordinator is headless, with no UI of its own. The entire frontend is a separate
 project, Cerebror, that depends on Ordinator, never the other way around.

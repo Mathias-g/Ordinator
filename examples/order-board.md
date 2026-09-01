@@ -1,9 +1,14 @@
 # Ordinator example: an order board
 
-Ordinator Boards are YAML, one `board.yaml` per document, holding the whole
-definition: every table, with its columns, types, and formulas inline. This is
-the document as an agent (or a human) sees it, all in one place, diffable and
-reviewable.
+Ordinator definitions ("Boards") are YAML, one `board.yaml` per document,
+holding the whole definition: every table, with its columns, types, and
+formulas inline. This is the document as an agent (or a human) sees it, all in
+one place, diffable and reviewable.
+
+A Board is the complete definition of a database: its structure and behavior
+together. Structure is the tables, columns, types, and references; behavior is
+the formulas that compute values and keep them consistent. The Board is how the
+database is structured and computed, in one place.
 
 A Board has two top-level keys:
 
@@ -37,18 +42,18 @@ tables:
   # Customers: the people and companies we sell to.
   customers:
     columns:
-      name:
+      name:                               # display name
         id: 01a05e78-0378-7301-a0f1-aa8ccacff69e
-        type: text                        # display name
-      email:
+        type: text
+      email:                              # contact email
         id: 01a05e78-0378-72ca-8d74-9fbbd03524cd
-        type: text                        # contact email
-      is_vip:
+        type: text
+      is_vip:                             # true for high-value customers
         id: 01a05e78-0378-7002-8c6e-e373b266617e
-        type: bool                        # true for high-value customers
-      joined:
+        type: bool
+      joined:                             # when they signed up
         id: 01a05e78-0378-724a-9f4b-edb771193bed
-        type: date                        # when they signed up
+        type: date
 
       full_name:                          # formula: name shown capitalized
         id: 01a05e78-0378-7313-83a3-58a17b6687dd
@@ -69,9 +74,9 @@ tables:
         id: 01a05e78-0378-738d-af49-f6d96e1b95c5
         type: ref
         target: customers
-      placed:
+      placed:                             # order date
         id: 01a05e78-0378-7095-b49f-aa0667f66422
-        type: date                        # order date
+        type: date
       status:
         id: 01a05e78-0378-7125-b890-f4b6cae314e9
         type: choice
@@ -113,19 +118,19 @@ tables:
   # order row; this is what lets orders aggregate their children above.
   order_lines:
     columns:
-      order:
+      order:                              # which order this line belongs to
         id: 01a05e78-0378-71f0-bf5a-a9e8a1b93a61
         type: ref
-        target: orders                     # which order this line belongs to
-      sku:
+        target: orders
+      sku:                                # product identifier
         id: 01a05e78-0378-716b-a723-254f5c76b523
-        type: text                         # product identifier
-      qty:
+        type: text
+      qty:                                # how many units
         id: 01a05e78-0378-73c3-85b3-5df8b3ab1b76
-        type: numeric                       # how many units
-      unit_price:
+        type: numeric
+      unit_price:                         # price per unit
         id: 01a05e78-0378-71e8-9450-b7d91e1ed59d
-        type: numeric                       # price per unit
+        type: numeric
 
       line_total:                          # formula: cost of this line
         id: 01a05e78-0378-7197-993b-d7276f228e33

@@ -14,6 +14,12 @@ definition (the Board, the access rules) is authored outside Ordinator,
 committed, and PR-gated, so it is diffable, reviewable, and statically
 checkable in exactly one place.
 
+A Board is the whole definition of a document (one database): structure and
+behavior together. Structure is the tables, their columns, types, and
+references; behavior is the formulas that compute values and keep them
+consistent. The Board is how the database is structured and computed, in one
+place.
+
 The SQLite file holds the data. It holds no editable and no authoritative
 definition: intent is expressed only in the Board and the access rules, never
 in the database. The data file does contain derived records, which the
@@ -108,4 +114,15 @@ Destruction is explicit and visible, and the default is safe:
 Whether `apply` can roll back a migration that fails partway is open
 (IDEAS: Schema changes and the apply cycle), as is how the plan is rendered for
 an authoring app (same anchor).
+
+## How a definition change is applied
+
+A definition change is applied by pushing it to the daemon over its HTTP API
+(ADR-0010). A client, which can be CI, an agent, a human, or any tool, sends
+the new definition (the Board and/or the access rules) to the daemon, and the
+daemon validates, plans, and applies it against the live SQLite file. The
+daemon is authoritative over whether and how the change is applied; the client
+decides when to send it. The daemon does not watch or fetch the definition
+from git on its own. CI plans over the committed text and then makes a plain
+HTTP call to apply after a merge, with no interactive session.
 

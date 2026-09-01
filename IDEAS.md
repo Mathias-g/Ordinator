@@ -187,8 +187,13 @@ documents/
 ## Schema changes and the apply cycle
 
 The settled behavior lives in SPEC (Schema changes and the apply cycle) and
-ADR-0007. What is still open:
+ADR-0007. How a change is applied is settled (ADR-0010): a client pushes the
+new definition to the daemon over its HTTP API, and the daemon validates,
+plans, and applies it. What is still open:
 
+- Whether the daemon proactively reports drift (that a Board committed but not
+  applied is ahead of the live schema) without being asked. Apply itself is
+  push-driven (ADR-0010); a proactive drift notice is separate and open.
 - Whether `apply` can roll back if a migration fails partway, and what the
   recovery story is when it cannot.
 - How the plan diff is rendered and what an authoring app reads to show it
@@ -749,13 +754,14 @@ early because it affects every widget's contract.
 
 ## Boards
 
-A Board is a document's complete definition: one `board.yaml` per document,
-holding every table with its columns, types, and formulas inline. It is the
-analogue of Grist's code-view file, which holds a whole document's schema and
-formulas in one artifact. A Board is how the document works, not how it looks:
-it is not a frontend page, it does not describe widgets or layout, and it is
-not split across `tables/` or `views/` directories. Schema and behavior are not
-separate; a column's type and its formula live together, as they do in Grist.
+A Board is a document's complete definition, structure and behavior together:
+one `board.yaml` per document, holding every table with its columns, types, and
+formulas inline. It is the analogue of Grist's code-view file, which holds a
+whole document's schema and formulas in one artifact. A Board is how the
+document works, not how it looks: it is not a frontend page, it does not
+describe widgets or layout, and it is not split across `tables/` or `views/`
+directories. Schema and behavior are not separate; a column's type and its
+formula live together, as they do in Grist.
 
 A Board is the same kind of thing as the rest of the definition: a file an
 agent authors, that is diffable, reviewable, and statically checkable. It is
@@ -833,6 +839,14 @@ should do the same. These are the conventions:
 - **Comments say what things are, not which category they belong to.** A comment
   on a column says what the column does or why it exists, not a Grist-internal
   label like `# Stats` or `# Logical`.
+- **A comment sits on the line of the thing it describes.** A comment about a
+  column belongs on the column's name line, not on one of the column's fields
+  (`type`, `id`, `formula`): the column is the thing being described, and the
+  fields are its properties. A comment about something specific inside a formula
+  (a particular expression, branch, or value) is the exception: it belongs on
+  that line of the formula, because that is the thing it describes. In general,
+  put a comment on the line of the thing it is about, not on a sub-item, unless
+  the comment is specifically about that sub-item.
 - **Two-space indentation** throughout, matching the access YAML.
 - **List one column per line**, and align them where the names are of similar
   length. Do not pack many columns onto one line.
