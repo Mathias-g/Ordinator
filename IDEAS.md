@@ -540,6 +540,285 @@ Open questions:
 
 ---
 
+## Pluggable data stores and store migration
+
+Ordinator is built on SQLite and nothing else for now (BSSN). This idea captures
+what a second data store backend (for example Postgres) would look like if it is
+ever wanted, and, more importantly, the cheap habits to keep now so that
+building it later does not require reworking the daemon. Nothing here is decided;
+the value today is the "do not build it in a way that blocks this" list.
+
+### Why the Grist-like functions are safe
+
+Formulas are computed by the daemon over an in-memory model (ADR-0005), and the
+SQLite file is storage only. Lookups, reverse traversal, row sets, and
+aggregation never touch SQL. So a second backend affects none of what makes
+Ordinator feel like Grist. The cost of a second backend lives entirely in the
+storage layer: type mapping, migration rendering, and the test matrix, paid per
+backend forever.
+
+### Keeping the door open (the habits)
+
+Five things that cost almost nothing now:
+
+1. **A storage seam.** The daemon touches the database through one narrow
+   package (open, read rows, write rows, apply migration). No sqlite3 calls
+   outside it.
+2. **Portable types.** Column types map to a small internal set (text, number,
+   bool, date/datetime, JSON, reference), and the emit step translates that set
+   to backend SQL. Nothing stored in a SQLite-only representation.
+3. **Semantic migrations.** The migration planner emits operations (add column,
+   drop column, convert type), not hand-written SQLite DDL. Each backend
+   renders its own SQL.
+4. **File-ness is a backend capability, not an assumption.** Bare-read
+   debugging, copy-the-file backup, and the definition snapshot (ADR-0008) are
+   SQLite capabilities exposed as such, not woven through the daemon. The daemon
+   asks what the store can do rather than assuming.
+5. **Metadata through an accessor.** The snapshot and any metadata go through
+   "get/set board metadata", never direct SQL against a specific table shape.
+
+One real risk to watch: SQLite is loosely typed and Postgres is strict. As long
+as the daemon validates and coerces values itself before writing, per the
+typed-column model, both backends see clean data and this stays a non-issue.
+
+### Where the store is declared
+
+Following Servitor's split (the artifact declares a name, the deployment
+resolves it, ADR-0035's shape): the board may name a store (`store: primary`),
+the instance config maps that name to a concrete backend and credential. The
+board carries a reference, never resolution: no DSN, no path, no provider
+detail. This keeps board.yaml portable and diffable. A simpler intermediate
+contract is one configured store per instance with no board-level name at all;
+the indirection only earns its place when a concrete need appears (splitting one
+board across stores, attaching an existing database as a table source). Adding
+the name later is cheap if the seam rules above are followed.
+
+Defaulting rule: if no store is declared, the default is SQLite. This keeps the
+zero-config path identical to the current design, makes SQLite the floor every
+instance can rely on, and lets the store declaration be introduced without any
+migration burden on existing boards.
+
+The feature that would justify the board-level name: switching the board's
+store, with the daemon migrating all data automatically as a first-class
+operation (see Store migration below). Under that design the "board stays
+store-agnostic" property survives by construction: the board names a store and
+the daemon migrates data between things the board never has to understand. The
+one line to hold onto is that the board may name a store, never describe one.
+
+### Credentials: what transfers from Servitor's secret model
+
+Servitor resolves secrets through a pluggable in-process provider (ADR-0032)
+with three-way failure semantics (source unreachable, secret missing, secret
+stale), per-node delivery (ADR-0033), and non-exportable at-rest key custody.
+Secret resolution there is also part of the capabilities interface: sources are
+enumerable (the `secret-resolution` mechanism group, ADR-0036), declarations
+live in a config file (`secrets.yaml` shape), and failures surface as
+structured, named error codes the agent can diagnose.
+
+What transfers to Ordinator's data stores:
+
+- The narrow provider interface (`Resolve(ref) -> credential`), used for a
+  Postgres DSN and, if the encryption-at-rest question (THREATS.md) ever lands,
+  for the SQLite key. The operator keeps the store they already have. The
+  contract should be a published pattern with Servitor's store as one resolver,
+  not an import, per the independence constraint.
+- The three-way failure semantics, surfaced as structured, named error codes
+  (`store_unreachable`, `credential_missing`, `credential_invalid`) at boot and
+  apply, in the same spirit as Servitor's structured `missing_secret`. The
+  idle-bad versus in-use-bad distinction (wrong credential at boot versus
+  connection dropped mid-session) comes with it in the same vocabulary.
+- The capability-surface idea: the store and its credential source are declared
+  and discoverable, not implicit. What should not be copied at Servitor's depth
+  is making this agent-facing in the board itself; boards author tables and
+  columns, and the store declaration belongs to the instance's operational
+  interface, not the artifact.
+- Non-exportable key custody (TPM-sealed or KMS key) as the strongest known
+  answer for at-rest encryption of the SQLite file.
+
+What does not transfer: per-node, per-subprocess delivery and
+hold-nothing-past-use (ADR-0033). Ordinator has no node subprocess boundary, and
+a database credential is inherently hold-for-life (needed at every reconnect).
+Resolve-on-demand with provider-side caching is as far as it goes.
+
+### External writers
+
+Two different motivations exist for letting writes reach the store without going
+through the daemon's model, and they should not be confused:
+
+- **Trusted external tools writing plain stored columns** (the server-backend
+  rationale). Bounds: fine for stored columns without formulas, by trusted
+  writers, if the daemon can observe changes. They must never write computed
+  columns (daemon-owned), and they bypass daemon-side validation, coercion, and
+  access rules, which is tolerable for trusted writers only. The real machinery
+  cost is change notification: the daemon needs to find out about external
+  writes to feed the dependency graph. On Postgres that is native (triggers plus
+  LISTEN/NOTIFY, or polling). On SQLite there is no notification, so it would
+  require an Honker-style trigger-fed change log, which is part of why external
+  writers are treated as a server-backend capability. This is a genuinely
+  different invariant from "the daemon is sole writer" and would earn its own
+  ADR if it ever lands.
+- **The daemon's own API writing directly to the store for throughput**
+  (parallel request handling). This runs into two walls. First, SQLite allows
+  exactly one writer at a time even in WAL mode, so parallel write threads
+  serialize at the database level regardless of daemon threading; WAL's real
+  gift is many concurrent readers alongside the one writer. Second, and more
+  fundamentally, every write passes through the in-memory model (validation,
+  coercion, access rules, dependency graph, recompute), and that path is
+  serial by design because the model is the consistency core. Bypassing the
+  daemon either skips that machinery or makes the daemon an observer of its own
+  database, with cache-coherence and staleness problems that trade away
+  ADR-0005's predictability. The performance levers that actually move anything:
+  batch writes through the daemon as one transaction (one model update, one
+  recompute pass), parallel reads over WAL, and parallel formula evaluation
+  across rows the dependency graph says are independent.
+
+An intake-queue shape (API threads land writes in a durable queue, one applier
+drains them serially through the model) was considered for the throughput
+motivation. The honest verdict: with Honker (a SQLite extension whose queue is
+tables in the same file), every enqueue is itself a SQLite write contending for
+the same single write lock, so intake parallelism is illusory. What a durable
+intake would buy is durability at intake and latency separation, not write
+throughput. If intake parallelism is ever needed, the options are an in-memory
+queue in the daemon (simple, loses accepted-but-unapplied writes on crash, which
+is probably the right trade), a separate small SQLite file (per-file write locks
+give genuine concurrency, at the cost of the one-file backup story), or a real
+broker (only coherent if the store already is a server). None is needed today.
+
+### Honker's role
+
+Honker (Servitor's runtime dependency) is a SQLite extension adding
+Postgres-style notify, a durable work queue, event streams, and a scheduler to
+one `.db` file. The conclusion of working through it: Honker solves problems of
+many producers, many consumers, and cross-process durability, and Ordinator's
+single-daemon design deliberately does not have those problems. Its needs are
+"one trusted process keeps its model and its store in step", answered by
+transactions, the dependency graph, and the storage seam. Specifically:
+
+- Notify/LISTEN: the daemon is the sole writer and knows about every change the
+  instant it makes it. SQLite's missing notify costs nothing in this model.
+- Durable queue: the outbox is a table written in the same transaction as the
+  change, plus a delivery loop in the daemon. Honker would be a second queue
+  under one that already works.
+- Scheduler: Ordinator does not own workflow (SPEC: What this is not), so there
+  is no cron layer to provide.
+- Partly applied writes and partly applied schema changes: solved by SQLite
+  transactions (the snapshot rides in the same transaction, ADR-0008, and
+  multi-row writes commit atomically). Honker would only matter where
+  transactions cannot reach, which is the second-writer scenarios above.
+
+So Honker is not a missing piece in any open Ordinator question. If a scenario
+above ever becomes real, it re-enters as a candidate implementation of the
+queue/notify capability behind the seam, competing with plain alternatives (a
+table plus a loop, a second SQLite file, a channel in the daemon), not as a
+prerequisite.
+
+### Store migration (the payoff feature)
+
+The feature that would justify board-level store declaration: switching the
+board's store from SQLite to Postgres (or back), with the daemon migrating all
+data automatically as a first-class operation, the way the compiler owns type
+changes. Sketch:
+
+- A plan/dry-run step first: which tables, how many rows, which computed
+  columns will move.
+- Computed columns are copied, then verified by recompute, rather than
+  rebuilt.
+- Stop-the-world cutover: pause writes, copy, verify, flip, drain, resume. The
+  old SQLite file is left untouched as the rollback path. No dual-write or
+  online-migration machinery for a single-node self-hosted product.
+- The definition snapshot (ADR-0008) travels with the data, so the new store is
+  self-describing the same way. It is just another table, so this works cleanly.
+- Failure mid-migration: delete the partial target, stay on SQLite. The
+  preserved old file is what makes this easy.
+- Two credentials resolvable at once during the migration window, which the
+  provider seam handles naturally.
+
+### The change queue during migration
+
+During a migration the data store stops accepting changes, buffers them in some
+sort of log, and resumes after the cutover. Two cases:
+
+- **Writes through the daemon (normal model):** no store-side log needed. The
+  daemon is the sole writer (ADR-0010), so it pauses its write path and holds
+  incoming change requests, arriving over its HTTP API anyway, then drains them
+  against the new store after the flip. The store never learns a migration
+  happened.
+- **External writers:** the log becomes necessary. Either a privilege flip that
+  makes the store reject writes during the window, or a trigger-fed change log
+  captured during the window and replayed after, which is real CDC machinery.
+  This problem only exists once external writers exist, so it should not be
+  built now.
+
+A general primitive lurks here: "the daemon can hold and later flush a queue of
+changes." The migration pause-drain-resume flow, the change-events outbox (see
+Change events out), an intake queue if one is ever wanted, and any durable
+queue behind the seam are all the same shape. If any of them ever get built,
+they should be one queue capability behind the seam with pluggable
+implementations (in-memory, a table plus a loop, a second SQLite file, a
+backend-native mechanism), not several unrelated mechanisms.
+
+### Scale by process, not by threads
+
+The horizontal story that fits the document-as-unit-of-isolation: one server
+per board, scale by adding boards. Unrelated boards never contend, and the
+concurrency ceiling becomes per-document. Open limits:
+
+- A single hot board cannot be split, and its ceiling is one daemon, one
+  writer, serial recompute. No horizontal scaling fixes a hot document.
+- Cross-board coupling (a shared reference table, a lookup into another board)
+  would block clean splits. Ordinator currently has no cross-board reference
+  concept, which quietly makes the split story more viable, not less; that is
+  an argument for not adding one casually.
+- Operational overhead of N daemons (ports, credentials, upgrades), and
+  cross-board aggregation needs the control-plane/federation idea (read-only
+  by design).
+
+This composes with the backend question rather than competing with it: the
+Postgres shape is also "many boards share one server instance" (per-board
+database or schema), the multi-tenant story the single-file model makes
+awkward. Per-board SQLite files give a crude version today: N boards, N files,
+N daemons, no contention.
+
+### Other candidate backends
+
+- **dqlite (Canonical): SQLite replicated across a cluster with Raft.** It
+  solves a different axis than Postgres: availability and failover (automatic
+  leader election, fast failover), not write concurrency (writes still go to
+  one leader; nodes run SQLite single-threaded). The file stays SQLite-shaped,
+  so it preserves more of the file-first story than a server backend would.
+  Costs: a C library via CGo, and operating a Raft cluster for a product whose
+  posture is single-node self-hosted. Worth revisiting only if HA for a board's
+  store becomes a real need.
+- A third-shape backend should only be evaluated once the seam exists; its
+  plausibility at all is an argument for the habits above.
+
+### Dependencies and gating
+
+- Gated on nothing being built until Servitor ships. The Postgres backend
+  itself stays undecided until something forces the answer.
+- The provider/credentials half interacts with the encryption-at-rest open
+  questions in THREATS.md (the same resolver would provision the key).
+- The board-level `store:` name is gated on a concrete multi-store need; the
+  one-store-per-instance contract is the simpler default.
+
+Open questions, none settled:
+
+- Whether external writers are ever wanted at all, and if so under which
+  backend and with what bounds. (Would earn its own ADR.)
+- Whether intake parallelism for the daemon's API is ever a real need, and if
+  so whether the in-memory queue, the second-file, or the server-native option
+  wins.
+- Whether the queue capability ("hold and flush changes") is built as one
+  mechanism shared by the outbox, migration, and intake, or per-feature.
+- Whether a server backend (Postgres) or replicated SQLite (dqlite) is ever
+  wanted, which are answers to different needs (features and multi-tenant
+  sharing versus availability), so they are alternatives only in cost, not in
+  kind.
+- Whether scale comes from process-per-board (multiple servers) or a
+  multi-document daemon, which interacts with the server-backend question.
+
+---
+
 ## Cross-validation between projects
 
 Both projects put their whole definition in git as text and both can emit
