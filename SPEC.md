@@ -55,11 +55,12 @@ What this means for behavior:
 
 ## Schema changes and the apply cycle
 
-Every column carries a stable random id (ADR-0007). The id is the column's
-identity; the human-readable label is what formulas, access rules, and the API
-use. Ids are minted locally by whatever authors the column (an app, an agent,
-or compiler tooling for hand authors), with no round-trip to Ordinator, and a
-duplicate id is a validation error. Because the definition is text and the data
+Every column carries a stable random id: a canonical UUIDv7 string (ADR-0009).
+The id is the column's identity; the human-readable label is what formulas,
+access rules, and the API use. Ids are minted locally by whatever authors the
+column (an app, an agent, or compiler tooling for hand authors), with no
+round-trip to Ordinator, and a duplicate id is a validation error. Because the
+definition is text and the data
 is in SQLite, a schema edit that changes the data's shape is a migration: it
 goes through the plan/apply cycle and is never a silent rewrite. Some edits
 (a rename, an add) touch no existing data and are near no-ops at the data

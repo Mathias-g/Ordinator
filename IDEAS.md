@@ -808,9 +808,9 @@ since Ordinator is Grist-shaped:
   references).
 - `attachments` for files.
 
-Every column also carries a stable random id, minted by tooling at authoring
-time (ADR-0007); the column's name is a human-readable label. The compiler
-refuses a missing or duplicate id.
+Every column also carries a stable random id: a canonical UUIDv7 string
+(ADR-0009), minted by tooling at authoring time; the column's name is a
+human-readable label. The compiler refuses a missing or duplicate id.
 
 Validation checks that every table and column a Board references exists and is
 well-typed, so a stale Board fails loudly at apply time instead of silently

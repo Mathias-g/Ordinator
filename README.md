@@ -1,14 +1,44 @@
 # Ordinator
 
-A self-hosted, agent-first database. Schema, formulas, and views live in text
-files; SQLite holds only data.
+A self-hosted, headless, agent-first relational spreadsheet. Schema and
+formulas live in text files; SQLite holds only the data.
 
-Ordinator is a Grist-shaped tool (tables, typed columns, formulas, views) built
-on SQLite, where the definition lives in text files rather than inside the
-database. A daemon owns the file and its single write connection, a CLI is the
-control plane, and a separate frontend project renders views and handles data
-entry.
+Ordinator is an alternative to Grist. Tables, typed columns, and formulas on
+SQLite, the way a spreadsheet works. What sets it apart is how you work with
+it: Grist is worked through a GUI, Ordinator through an agent.
 
-The idea is not near done. The open thinking lives in [IDEAS.md](IDEAS.md); the
-product behavior spec, once it exists, lives in [SPEC.md](SPEC.md). See
-[AGENTS.md](AGENTS.md) for how context is kept in this repository.
+Because an agent, not a GUI, is what reads and writes the definition, the whole
+definition is a text file: the Board. An agent opens a document and sees every
+table, column, and formula in one place. It is diffable, reviewable, and
+statically checkable. An agent authors it, a human reviews the diff in a PR,
+and a compiler turns the reviewed YAML into a migrated SQLite schema, with a
+plan/dry-run step before anything destructive is applied.
+
+## How it is put together
+
+- **The Board**: one `board.yaml` per document, holding every table, column
+  type, and formula. Access rules live in their own `access.yaml`.
+- **The daemon** owns the document folder and its single write connection. It
+  hosts the compiler, computes formulas over an in-memory model with a
+  dependency graph, and serves data continuously.
+- **The CLI** is the control plane. It drives the plan/apply cycle that turns a
+  changed Board into a migrated schema, surfacing destructive changes before
+  they are applied.
+
+Ordinator is headless, with no UI of its own. The entire frontend is a separate
+project, Cerebror, that depends on Ordinator, never the other way around.
+
+## What it deliberately is not
+
+Ordinator does not own workflow. No automations, schedules, branching, or
+outbound logic in its own config; those belong to a workflow tool. Formulas are
+pure and synchronous, with no I/O. And Ordinator is independent of Servitor: it
+sits well next to Servitor in the same stack, but every integration point is a
+published standard, useful to someone who has never heard of Servitor.
+
+## Status
+
+Nothing is built yet; the design is being worked out deliberately before code
+starts. Open thinking lives in [IDEAS.md](IDEAS.md), settled behavior in
+[SPEC.md](SPEC.md), and the plan in [PLAN.md](PLAN.md).
+[AGENTS.md](AGENTS.md) describes how context is kept in this repository.
