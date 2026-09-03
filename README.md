@@ -1,4 +1,4 @@
-<img src="ordinatorLogo.png" alt="Ordinator" width="400">
+<img src="ordinatorLogo.png" alt="Ordinator" height="160">
 
 A self-hosted, headless, agent-first relational spreadsheet. Schema and
 formulas live in text files; SQLite holds only the data.
