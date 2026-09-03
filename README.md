@@ -1,11 +1,16 @@
 <img src="ordinatorLogo.png" alt="Ordinator" height="160">
 
-A self-hosted, headless, agent-first relational spreadsheet. Schema and
-formulas live in text files; SQLite holds only the data.
+Relational spreadsheets for the agentic stack. Self-hosted. MIT-licensed.
 
-Ordinator is an alternative to Grist. Tables, typed columns, and formulas on
-SQLite, the way a spreadsheet works. What sets it apart is how you work with
-it: Grist is worked through a GUI, Ordinator through an agent.
+Ordinator is a self-hosted headless relational spreadsheet designed from the ground up for AI agents to author and operate. Documents are declared as YAML files (called **Boards**); a long-lived daemon owns the document and its data in SQLite; a CLI control plane exposes the whole thing for humans and agents alike.
+
+The document is fully defined by the Board file, nowhere else. There is no built-in web UI; the frontend is a separate project, Cerebror, that depends on Ordinator through the same interface agents use.
+
+## Why it exists
+
+If you already run a stack like Servitor for workflow automation, you still need somewhere for the structured data those workflows push and pull: tables, typed columns, formulas. The existing options don't quite fit. Grist is worked through a GUI, with the definition living inside the database where an agent can't see it as text.
+
+Ordinator is an opinionated take: tables, typed columns, and formulas on SQLite, the way a spreadsheet works, but read and written by an agent rather than a GUI.
 
 Because an agent, not a GUI, is what reads and writes the definition, the whole
 definition is a text file: the Board, the structure and behavior of a document
